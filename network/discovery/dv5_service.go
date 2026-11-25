@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -396,7 +398,13 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		return newPeerSkipError(skipReasonNoSharedSubnets, fmt.Errorf("no shared subnets: own=%s peer=%s", dvs.subnets.StringHumanReadable(), peerSubnets.StringHumanReadable()))
 	}
 
-	if dvs.discoveredPeersPool.Has(pid) {
+	// Skip a peer already in the pool unless its record is newer (lookups can still return older ones). A newer
+	// record at another address replaces the entry: an entry that keeps failing never expires, as each retry
+	// refreshes its TTL, so the node would keep dialing the old address until restarted. At the same address, the
+	// pool only takes the newer sequence number, so that a lookup's older record at another address can't replace
+	// the entry later.
+	known, alreadyDiscovered := dvs.discoveredPeersPool.Get(pid)
+	if alreadyDiscovered && e.Node.Seq() <= known.Seq {
 		recordPeerSkipped(ctx, skipReasonAlreadyDiscovered)
 		return newPeerSkipError(skipReasonAlreadyDiscovered, errors.New("peer already discovered recently"))
 	}
@@ -405,6 +413,16 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	if !dvs.limitNodeFilter(e.Node) {
 		recordPeerSkipped(ctx, skipReasonReachedLimit)
 		return newPeerSkipError(skipReasonReachedLimit, errors.New("reached limit"))
+	}
+
+	if alreadyDiscovered && !slices.EqualFunc(known.Addrs, e.AddrInfo.Addrs, ma.Multiaddr.Equal) {
+		dvs.logger.Debug("discovered peer at a new address",
+			fields.PeerID(pid),
+			zap.Stringers("known_addrs", known.Addrs),
+			zap.Uint64("known_seq", known.Seq),
+			zap.Stringers("new_addrs", e.AddrInfo.Addrs),
+			zap.Uint64("new_seq", e.Node.Seq()),
+		)
 	}
 
 	peerAcceptedCounter.Add(ctx, 1)

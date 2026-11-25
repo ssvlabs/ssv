@@ -1,13 +1,22 @@
 package p2pv1
 
 import (
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 // createSubnets creates a commons.Subnets with the specified subnets active.
@@ -418,3 +427,208 @@ func TestPeerSelectionScore(t *testing.T) {
 		require.Equal(t, 9.0, score)
 	})
 }
+
+func TestMarkTried(t *testing.T) {
+	selected := discovery.DiscoveredPeer{
+		AddrInfo: peer.AddrInfo{ID: "peer", Addrs: []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.1/tcp/13001")}},
+		Seq:      1,
+	}
+	newNetwork := func(t *testing.T) *p2pNetwork {
+		return &p2pNetwork{discoveredPeersPool: ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Hour, time.Hour)}
+	}
+
+	t.Run("counts the attempt", func(t *testing.T) {
+		n := newNetwork(t)
+		n.discoveredPeersPool.Set(selected.ID, selected)
+
+		require.True(t, n.markTried(selected))
+		pooled, ok := n.discoveredPeersPool.Get(selected.ID)
+		require.True(t, ok)
+		require.Equal(t, 1, pooled.Tries)
+		require.False(t, pooled.LastTry.IsZero())
+	})
+
+	t.Run("keeps a newer record added after selection", func(t *testing.T) {
+		n := newNetwork(t)
+		n.discoveredPeersPool.Set(selected.ID, selected)
+		moved := discovery.DiscoveredPeer{
+			AddrInfo: peer.AddrInfo{ID: selected.ID, Addrs: []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.2/tcp/13001")}},
+			Seq:      2,
+		}
+		n.discoveredPeersPool.Set(moved.ID, moved)
+
+		require.False(t, n.markTried(selected))
+		pooled, ok := n.discoveredPeersPool.Get(selected.ID)
+		require.True(t, ok)
+		require.Equal(t, moved, pooled)
+	})
+
+	t.Run("doesn't restore a removed entry", func(t *testing.T) {
+		n := newNetwork(t)
+		// Sequence number 0, as an mDNS peer has, is also what Get returns for a missing entry.
+		mdnsPeer := selected
+		mdnsPeer.Seq = 0
+
+		require.False(t, n.markTried(mdnsPeer))
+		require.False(t, n.discoveredPeersPool.Has(mdnsPeer.ID))
+	})
+
+	t.Run("doesn't overwrite a newer record stored concurrently", func(t *testing.T) {
+		n := newNetwork(t)
+
+		// Without discoveredPeersMu, markTried can write its copy back after addDiscoveredPeer stored the newer
+		// record, which happens in a fraction of a percent of the rounds.
+		const rounds = 20_000
+		for i := range uint64(rounds) {
+			selected := selected
+			selected.Seq = 2 * i
+			n.discoveredPeersPool.Set(selected.ID, selected)
+			moved := discovery.DiscoveredPeer{
+				AddrInfo: peer.AddrInfo{ID: selected.ID, Addrs: []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.2/tcp/13001")}},
+				Seq:      2*i + 1,
+			}
+
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			wg.Go(func() {
+				<-start
+				n.markTried(selected)
+			})
+			wg.Go(func() {
+				<-start
+				n.addDiscoveredPeer(moved)
+			})
+			close(start)
+			wg.Wait()
+
+			pooled, ok := n.discoveredPeersPool.Get(selected.ID)
+			require.True(t, ok)
+			require.Equal(t, moved, pooled, "round %d", i)
+		}
+	})
+}
+
+func TestAddDiscoveredPeer(t *testing.T) {
+	addrA := []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.1/tcp/13001")}
+	addrB := []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.2/tcp/13001")}
+	lastTry := time.Now().Add(-time.Minute)
+	discovered := func(addrs []ma.Multiaddr, seq uint64, tries int) discovery.DiscoveredPeer {
+		p := discovery.DiscoveredPeer{AddrInfo: peer.AddrInfo{ID: "peer", Addrs: addrs}, Seq: seq, Tries: tries}
+		if tries > 0 {
+			p.LastTry = lastTry
+		}
+		return p
+	}
+
+	tests := []struct {
+		name     string
+		pooled   *discovery.DiscoveredPeer
+		proposal discovery.DiscoveredPeer
+		want     discovery.DiscoveredPeer
+	}{
+		{
+			name:     "new peer",
+			proposal: discovered(addrA, 1, 0),
+			want:     discovered(addrA, 1, 0),
+		},
+		{
+			name:     "older record at another address",
+			pooled:   new(discovered(addrB, 2, 3)),
+			proposal: discovered(addrA, 1, 0),
+			want:     discovered(addrB, 2, 3),
+		},
+		{
+			name:     "older record at the same address",
+			pooled:   new(discovered(addrA, 2, 3)),
+			proposal: discovered(addrA, 1, 0),
+			want:     discovered(addrA, 2, 3),
+		},
+		{
+			name:     "newer record at the same address keeps the retry count",
+			pooled:   new(discovered(addrA, 1, 3)),
+			proposal: discovered(addrA, 2, 0),
+			want:     discovered(addrA, 2, 3),
+		},
+		{
+			name:     "newer record at another address resets the retry count",
+			pooled:   new(discovered(addrA, 1, 3)),
+			proposal: discovered(addrB, 2, 0),
+			want:     discovered(addrB, 2, 0),
+		},
+		{
+			name:     "mDNS peer at another address",
+			pooled:   new(discovered(addrA, 0, 3)),
+			proposal: discovered(addrB, 0, 0),
+			want:     discovered(addrB, 0, 0),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &p2pNetwork{discoveredPeersPool: ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Hour, time.Hour)}
+			if tt.pooled != nil {
+				n.discoveredPeersPool.Set(tt.pooled.ID, *tt.pooled)
+			}
+
+			n.addDiscoveredPeer(tt.proposal)
+
+			pooled, ok := n.discoveredPeersPool.Get(tt.proposal.ID)
+			require.True(t, ok)
+			require.Equal(t, tt.want, pooled)
+		})
+	}
+}
+
+// TestBootstrapDiscovery_RecordSeq checks that bootstrapDiscovery passes each peer on with its record's sequence
+// number, which checkPeer and markTried compare pool entries by, or with 0 for an mDNS peer, which has no record.
+func TestBootstrapDiscovery_RecordSeq(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	var record enr.Record
+	record.SetSeq(7)
+	require.NoError(t, enode.SignV4(&record, key))
+	node, err := enode.New(enode.V4ID{}, &record)
+	require.NoError(t, err)
+
+	events := []discovery.PeerEvent{
+		{AddrInfo: peer.AddrInfo{ID: "discv5-peer"}, Node: node},
+		{AddrInfo: peer.AddrInfo{ID: "mdns-peer"}},
+	}
+	n := &p2pNetwork{
+		logger: zap.NewNop(),
+		disc:   eventsDiscovery{events: events},
+		idx:    connectableIndex{},
+	}
+	connector := make(chan discovery.DiscoveredPeer, len(events))
+	n.bootstrapDiscovery(connector) // returns once Bootstrap does, closing connector
+
+	var proposed []discovery.DiscoveredPeer
+	for p := range connector {
+		proposed = append(proposed, p)
+	}
+	require.Equal(t, []discovery.DiscoveredPeer{
+		{AddrInfo: events[0].AddrInfo, Seq: 7},
+		{AddrInfo: events[1].AddrInfo},
+	}, proposed)
+}
+
+// eventsDiscovery is a discovery.Service whose Bootstrap passes its events to the handler and returns.
+// bootstrapDiscovery calls nothing else, so the embedded nil Service is never dereferenced.
+type eventsDiscovery struct {
+	discovery.Service
+	events []discovery.PeerEvent
+}
+
+func (d eventsDiscovery) Bootstrap(handler discovery.HandleNewPeer) error {
+	for _, e := range d.events {
+		handler(e)
+	}
+	return nil
+}
+
+// connectableIndex is a peers.Index that allows connecting to any peer. bootstrapDiscovery calls nothing else, so the
+// embedded nil Index is never dereferenced.
+type connectableIndex struct {
+	peers.Index
+}
+
+func (connectableIndex) CanConnect(peer.ID) error { return nil }
