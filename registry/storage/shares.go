@@ -438,6 +438,7 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 }
 
 // UpdateValidatorsMetadata updates shares with provided validator metadata.
+// Unknown metadata never replaces a share's known metadata.
 // It returns only metadata entries that actually changed the stored shares.
 // The returned map is nil if no changes occurred.
 func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
@@ -452,7 +453,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 	err := func() error {
 		// using a read-lock here even if we are writing to the share pointer
 		// because it's the only place writes are happening
-		// TODO: re-implemented in a safer maner in future iteration
+		// TODO: re-implemented in a safer manner in future iteration
 		s.memoryMtx.RLock()
 		defer s.memoryMtx.RUnlock()
 
@@ -467,6 +468,13 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
+				share.BeaconMetadataLastUpdated = time.Now()
+				continue
+			}
+
+			// A validator never leaves the beacon state, so Unknown metadata for a share with known
+			// metadata (e.g. the beacon node omitted the validator) is a bad response: keep the known one.
+			if metadata.Unknown() && share.HasBeaconMetadata() {
 				share.BeaconMetadataLastUpdated = time.Now()
 				continue
 			}
