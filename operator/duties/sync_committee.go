@@ -119,7 +119,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 				if !h.netCfg.BooleForkAtSlot(currentSlot) {
 					// Before Boole fork: execute Alan sync committee contribution flow.
-					h.processExecution(tickCtx, currentPeriod, currentSlot)
+					h.processExecution(tickCtx, currentSlot)
 				}
 
 				// After Boole fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
@@ -159,9 +159,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 					// 2) Process certain intents immediately.
 					// When at period boundary, we only care about pre-fetching & preparing the duties for the next
-					// period (the current period will have been passed upon the next slot-tick). Otherwise, pre-fetch &
-					// prepare the duties for the current period.
-					if h.atLastSlotOrPastCurrentPeriod(currentSlot, currentPeriod) {
+					// period (its committee is on duty from the next slot-tick on). Otherwise, pre-fetch & prepare
+					// the duties for the current period.
+					if h.atOrPastLastActionableSlot(currentSlot, currentPeriod) {
 						delete(h.dutyFetchIntents, currentPeriod) // optimization: prune irrelevant intent
 						h.prepareNextPeriod(tickCtx, logger, currentPeriod, currentEpoch, currentSlot, true)
 					} else {
@@ -251,11 +251,9 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	h.dutyFetchIntents[nextPeriod] = false
 
 	// 2) Process certain intents immediately.
-	// At the last slot of current period we don't fetch duties for the current period because we likely won't
-	// have enough time to process those duties anyway ... but we do want to fetch the duties for the next period
-	// right away in that case since we'll need to be able to execute those duties on the next tick - the tick
-	// corresponding to the 1st slot of the next period.
-	if h.atLastSlotOrPastCurrentPeriod(currentSlot, currentPeriod) {
+	// From the current period's last actionable slot on, only the next period's duties are worth fetching: its
+	// committee is on duty from the next tick on.
+	if h.atOrPastLastActionableSlot(currentSlot, currentPeriod) {
 		delete(h.dutyFetchIntents, currentPeriod) // optimization: prune irrelevant intent
 		h.prepareNextPeriod(initCtx, logger, currentPeriod, currentEpoch, currentSlot, false)
 	} else {
@@ -330,10 +328,13 @@ func (h *SyncCommitteeHandler) prepareNextPeriod(
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
+func (h *SyncCommitteeHandler) processExecution(ctx context.Context, slot phase0.Slot) {
 	if h.exporterMode {
 		return
 	}
+
+	// Already the next period in a period's last slot (see SyncCommitteeDutyPeriodAtSlot).
+	period := h.netCfg.SyncCommitteeDutyPeriodAtSlot(slot)
 
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.execute"),
