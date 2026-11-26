@@ -18,7 +18,7 @@ require (
 	// eth/simulator/testutils.go is a copy of ethclient/simulated/backend.go: sync it on each bump.
 	github.com/ethereum/go-ethereum v1.17.8
 	github.com/ferranbt/fastssz v1.0.0
-	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-chi/chi/v5 v5.4.0
 	github.com/go-chi/render v1.0.2
 	github.com/golang/gddo v0.0.0-20200528160355-8d077c1d8f4c
 	github.com/google/go-cmp v0.7.0
