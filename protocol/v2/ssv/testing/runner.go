@@ -10,7 +10,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -88,7 +88,7 @@ var ConstructBaseRunner = func(
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := spectypes.NewValidatorMsgID(spectypes.JatoTestnet, spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey), role)
 	net := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	km := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	dgHandler := doppelganger.NoOpHandler{}
@@ -240,7 +240,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	var valCheck ssv.ValueChecker
 	var contr *controller.Controller
 
-	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	km := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	dutyGuard := validator.NewCommitteeDutyGuard()
 	dgHandler := doppelganger.NoOpHandler{}
 
@@ -274,7 +274,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 		net = protocoltesting.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 
-		km = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+		km = ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 		committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
 		opSigner = spectestingutils.NewOperatorSigner(keySetInstance, committeeMember.OperatorID)
 

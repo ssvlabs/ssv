@@ -21,7 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 // faultyAggregateSubmitBeacon wraps the testing beacon node and forces the aggregate-selection-proof
@@ -61,7 +61,7 @@ func newAggregatorCommitteeRunnerEnv(
 	msgID := spectestingutils.AggregatorCommitteeMsgIDForKeySet(sampleKey)
 	network := protocoltesting.NewTestingNetwork(1, sampleKey.OperatorKeys[1])
 	logger := zaptest.NewLogger(t)
-	signer := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	signer := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 
 	config := protocoltesting.TestingConfig(logger, sampleKey)
 	config.Network = network

@@ -180,15 +180,13 @@ BATCH_SIZE=20 \
 
 ### Common Test Patterns
 ```go
-// Mock Web3Signer for testing
-mockSigner := &MockRemoteSigner{
-    ListKeysFunc: func(ctx context.Context) ([]phase0.BLSPubKey, error) {
-        return []phase0.BLSPubKey{testPubKey}, nil
-    },
+// Mock Web3Signer for testing (internal/mocks): set a call's result or error
+remoteSigner := &mocks.TestRemoteSigner{
+    ListKeysResult: []phase0.BLSPubKey{testPubKey},
 }
 
 // Test server with mock
-srv := NewServer(logger, operatorKey, mockSigner)
+srv := NewServer(logger, operatorKey, remoteSigner)
 ```
 
 ## Debugging Tips

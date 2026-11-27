@@ -12,7 +12,6 @@ import (
 
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -23,7 +22,7 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	testType = strings.Replace(testType, "spectest.", "synccommitteeaggregator.", 1)
 
 	runnerState := &runner.State{}
-	runnerState, err := storage.UnmarshalStateComparison("ssv", name, testType, runnerState)
+	runnerState, err := protocoltesting.UnmarshalStateComparison("ssv", name, testType, runnerState)
 	require.NoError(t, err)
 
 	root, err := runnerState.GetRoot()

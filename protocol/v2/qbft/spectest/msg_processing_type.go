@@ -17,7 +17,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -94,7 +93,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 }
 
 func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
-	postState, err := storage.UnmarshalStateComparison("qbft", test.TestName(),
+	postState, err := protocoltesting.UnmarshalStateComparison("qbft", test.TestName(),
 		reflect.TypeFor[*spectests.MsgProcessingSpecTest]().String(),
 		&specqbft.State{})
 	require.NoError(t, err)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -30,7 +31,7 @@ type ValCheckSpecTest struct {
 }
 
 func (test *ValCheckSpecTest) Run(t *testing.T) {
-	signer := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	signer := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	if len(test.SlashableSlots) > 0 {
 		// Transform SlashableSlots keys from secret-key-hex to public-key-hex.
 		// The spec's test fixtures use secret key hex as map keys, but our implementation
@@ -46,7 +47,7 @@ func (test *ValCheckSpecTest) Run(t *testing.T) {
 			pkHex := hex.EncodeToString(sk.GetPublicKey().Serialize())
 			transformedSlots[pkHex] = slots
 		}
-		signer = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManagerWithSlashableSlots(transformedSlots))
+		signer = ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManagerWithSlashableSlots(transformedSlots))
 	}
 
 	check := test.valCheckF(signer)

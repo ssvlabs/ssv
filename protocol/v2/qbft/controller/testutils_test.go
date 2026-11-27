@@ -1,4 +1,4 @@
-package qbft
+package controller
 
 import (
 	"crypto/rsa"
@@ -8,7 +8,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
-var TestingMessage = &specqbft.Message{
+var testingMessage = &specqbft.Message{
 	MsgType:    specqbft.ProposalMsgType,
 	Height:     specqbft.FirstHeight,
 	Round:      specqbft.FirstRound,
@@ -16,17 +16,17 @@ var TestingMessage = &specqbft.Message{
 	Root:       [32]byte{1, 2, 3, 4},
 }
 
-var TestingSignedMsg = func() *specqbft.ProcessingMessage {
-	return testingutils.ToProcessingMessage(testingutils.SignQBFTMsg(TestingSK, 1, TestingMessage))
+var testingSignedMsg = func() *specqbft.ProcessingMessage {
+	return testingutils.ToProcessingMessage(testingutils.SignQBFTMsg(testingSK, 1, testingMessage))
 }()
 
-var TestingSK = func() *rsa.PrivateKey {
+var testingSK = func() *rsa.PrivateKey {
 	skPem, _, _ := spectypes.GenerateKey()
 	ret, _ := spectypes.PemToPrivateKey(skPem)
 	return ret
 }()
 
-var TestingInstanceStruct = &specqbft.Instance{
+var testingInstanceStruct = &specqbft.Instance{
 	State: &specqbft.State{
 		CommitteeMember:                 testingutils.TestingCommitteeMember(testingutils.Testing4SharesSet()),
 		ID:                              []byte{1, 2, 3, 4},
@@ -34,44 +34,44 @@ var TestingInstanceStruct = &specqbft.Instance{
 		Height:                          1,
 		LastPreparedRound:               1,
 		LastPreparedValue:               []byte{1, 2, 3, 4},
-		ProposalAcceptedForCurrentRound: TestingSignedMsg,
+		ProposalAcceptedForCurrentRound: testingSignedMsg,
 		Decided:                         false,
 		DecidedValue:                    []byte{1, 2, 3, 4},
 
 		ProposeContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
-					TestingSignedMsg,
+					testingSignedMsg,
 				},
 			},
 		},
 		PrepareContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
-					TestingSignedMsg,
+					testingSignedMsg,
 				},
 			},
 		},
 		CommitContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
-					TestingSignedMsg,
+					testingSignedMsg,
 				},
 			},
 		},
 		RoundChangeContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
-					TestingSignedMsg,
+					testingSignedMsg,
 				},
 			},
 		},
 	},
 }
 
-var TestingControllerStruct = &specqbft.Controller{
+var testingControllerStruct = &specqbft.Controller{
 	Identifier:      []byte{1, 2, 3, 4},
 	Height:          specqbft.Height(1),
 	CommitteeMember: testingutils.TestingCommitteeMember(testingutils.Testing4SharesSet()),
-	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
+	StoredInstances: specqbft.InstanceContainer{testingInstanceStruct},
 }

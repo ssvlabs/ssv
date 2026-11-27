@@ -7,11 +7,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {
@@ -35,7 +35,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	default:
 		t.Fatalf("unknown runner type")
 	}
-	r, err := storage.UnmarshalStateComparison("ssv", name, testType, r)
+	r, err := protocoltesting.UnmarshalStateComparison("ssv", name, testType, r)
 	require.NoError(t, err)
 
 	// override base-runner NetworkConfig now

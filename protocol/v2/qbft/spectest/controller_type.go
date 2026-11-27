@@ -17,7 +17,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -187,7 +186,7 @@ func runInstanceWithData(
 }
 
 func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	byteValue, err := storage.ReadStateComparisonFile("qbft", test.TestName(),
+	byteValue, err := protocoltesting.ReadStateComparisonFile("qbft", test.TestName(),
 		reflect.TypeFor[*spectests.ControllerSpecTest]().String())
 	require.NoError(t, err)
 	sc := make([]*controller.Controller, len(test.RunInstanceData))

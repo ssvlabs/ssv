@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -27,7 +26,7 @@ import (
 // (pre-fork) spec vectors.
 func runQBFTMappingTest(t *testing.T) {
 	path, _ := os.Getwd()
-	jsonTests, err := storage.GenerateSpecTestJSON(path, "qbft")
+	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
 	untypedTests := map[string]any{}

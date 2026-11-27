@@ -1,17 +1,17 @@
-package storage
+package testing
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
+	stdtesting "testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 // moduleCacheDirFromEnv follows the go command: GOMODCACHE, else pkg/mod under the first GOPATH entry; with
 // neither, `go env` decides.
-func TestModuleCacheDirFromEnv(t *testing.T) {
+func TestModuleCacheDirFromEnv(t *stdtesting.T) {
 	list := func(paths ...string) string { return strings.Join(paths, string(os.PathListSeparator)) }
 	tests := []struct {
 		name               string
@@ -26,7 +26,7 @@ func TestModuleCacheDirFromEnv(t *testing.T) {
 		{name: "neither set"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(t *stdtesting.T) {
 			got, ok := moduleCacheDirFromEnv(tt.goModCache, tt.goPath)
 			require.Equal(t, tt.ok, ok)
 			require.Equal(t, tt.want, got)
