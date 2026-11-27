@@ -2349,6 +2349,33 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
 
+	// A justification is embedded without full data (ssv-spec#673). One that carries it is ignored, not rejected,
+	// until all nodes enforce the rule.
+	t.Run("round change justification with full data", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		justification := generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+			justMsg.MsgType = specqbft.RoundChangeMsgType
+		})
+		encodedJustification, err := justification.MarshalSSZ() // keeps the full data MarshalJustifications strips
+		require.NoError(t, err)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.RoundChangeJustification = [][]byte{encodedJustification}
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+
+		require.ErrorIs(t, err, ErrJustificationWithFullData)
+
+		var valErr Error
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.Reject())
+	})
+
 	// Send message root hash that doesn't match the expected root hash should receive an error
 	t.Run("wrong root hash", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)

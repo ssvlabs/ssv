@@ -22,6 +22,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	utilbellatrix "github.com/attestantio/go-eth2-client/util/bellatrix"
+	utilcapella "github.com/attestantio/go-eth2-client/util/capella"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/ssvlabs/ssv-spec/qbft"
@@ -585,8 +587,8 @@ var TestingBlindedBeaconBlockBytesV = func(version spec.DataVersion) []byte {
 
 var TestingBlindedBeaconBlockCapella = func() *apiv1capella.BlindedBeaconBlock {
 	fullBlk := TestingBeaconBlockCapella
-	txRoot, _ := types.SSZTransactions(fullBlk.Body.ExecutionPayload.Transactions).HashTreeRoot()
-	withdrawalsRoot, _ := types.SSZWithdrawals(fullBlk.Body.ExecutionPayload.Withdrawals).HashTreeRoot()
+	txRoot, _ := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: fullBlk.Body.ExecutionPayload.Transactions}).HashTreeRoot()
+	withdrawalsRoot, _ := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: fullBlk.Body.ExecutionPayload.Withdrawals}).HashTreeRoot()
 	ret := &apiv1capella.BlindedBeaconBlock{
 		Slot:          fullBlk.Slot,
 		ProposerIndex: fullBlk.ProposerIndex,
@@ -628,8 +630,8 @@ var TestingBlindedBeaconBlockCapella = func() *apiv1capella.BlindedBeaconBlock {
 
 var TestingBlindedBeaconBlockDeneb = func() *apiv1deneb.BlindedBeaconBlock {
 	blockContents := TestingBlockContentsDeneb
-	txRoot, _ := types.SSZTransactions(blockContents.Block.Body.ExecutionPayload.Transactions).HashTreeRoot()
-	withdrawalsRoot, _ := types.SSZWithdrawals(blockContents.Block.Body.ExecutionPayload.Withdrawals).HashTreeRoot()
+	txRoot, _ := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: blockContents.Block.Body.ExecutionPayload.Transactions}).HashTreeRoot()
+	withdrawalsRoot, _ := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: blockContents.Block.Body.ExecutionPayload.Withdrawals}).HashTreeRoot()
 	ret := &apiv1deneb.BlindedBeaconBlock{
 		Slot:          blockContents.Block.Slot,
 		ProposerIndex: blockContents.Block.ProposerIndex,
@@ -674,8 +676,8 @@ var TestingBlindedBeaconBlockDeneb = func() *apiv1deneb.BlindedBeaconBlock {
 
 var TestingBlindedBeaconBlockElectra = func() *apiv1electra.BlindedBeaconBlock {
 	blockContents := TestingBlockContentsElectra
-	txRoot, _ := types.SSZTransactions(blockContents.Block.Body.ExecutionPayload.Transactions).HashTreeRoot()
-	withdrawalsRoot, _ := types.SSZWithdrawals(blockContents.Block.Body.ExecutionPayload.Withdrawals).HashTreeRoot()
+	txRoot, _ := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: blockContents.Block.Body.ExecutionPayload.Transactions}).HashTreeRoot()
+	withdrawalsRoot, _ := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: blockContents.Block.Body.ExecutionPayload.Withdrawals}).HashTreeRoot()
 	ret := &apiv1electra.BlindedBeaconBlock{
 		Slot:          blockContents.Block.Slot,
 		ProposerIndex: blockContents.Block.ProposerIndex,
@@ -721,8 +723,8 @@ var TestingBlindedBeaconBlockElectra = func() *apiv1electra.BlindedBeaconBlock {
 
 var TestingBlindedBeaconBlockFulu = func() *apiv1electra.BlindedBeaconBlock {
 	blockContents := TestingBlockContentsFulu
-	txRoot, _ := types.SSZTransactions(blockContents.Block.Body.ExecutionPayload.Transactions).HashTreeRoot()
-	withdrawalsRoot, _ := types.SSZWithdrawals(blockContents.Block.Body.ExecutionPayload.Withdrawals).HashTreeRoot()
+	txRoot, _ := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: blockContents.Block.Body.ExecutionPayload.Transactions}).HashTreeRoot()
+	withdrawalsRoot, _ := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: blockContents.Block.Body.ExecutionPayload.Withdrawals}).HashTreeRoot()
 	ret := &apiv1electra.BlindedBeaconBlock{
 		Slot:          blockContents.Block.Slot,
 		ProposerIndex: blockContents.Block.ProposerIndex,

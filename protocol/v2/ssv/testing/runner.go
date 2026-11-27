@@ -207,6 +207,16 @@ var ConstructBaseRunner = func(
 		r, err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
 			BaseRunnerOptions: baseOpts,
 		})
+	case spectypes.RolePTCAttester:
+		r, err = runner.NewPTCAttesterRunner(runner.PTCAttesterRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+		})
+	case spectypes.RoleProposerPreferences:
+		r, err = runner.NewProposerPreferencesRunner(runner.ProposerPreferencesRunnerOptions{
+			BaseRunnerOptions:    baseOpts,
+			FeeRecipientProvider: &mocks.FeeRecipientProvider{},
+			GasLimit:             spectypes.DefaultGasLimit,
+		})
 	case spectestingutils.UnknownDutyType:
 		r, err = runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
 			BaseRunnerOptions:   baseOpts,
@@ -385,6 +395,16 @@ var ConstructBaseRunnerWithShareMap = func(
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
 			BaseRunnerOptions: baseOpts,
+		})
+	case spectypes.RolePTCAttester:
+		r, err = runner.NewPTCAttesterRunner(runner.PTCAttesterRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+		})
+	case spectypes.RoleProposerPreferences:
+		r, err = runner.NewProposerPreferencesRunner(runner.ProposerPreferencesRunnerOptions{
+			BaseRunnerOptions:    baseOpts,
+			FeeRecipientProvider: &mocks.FeeRecipientProvider{},
+			GasLimit:             spectypes.DefaultGasLimit,
 		})
 	case spectestingutils.UnknownDutyType:
 		r, err = runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -441,9 +442,7 @@ func (mv *messageValidator) processSignerState(
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {
 	pj, err := message.GetPrepareJustifications()
 	if err != nil {
-		e := ErrMalformedPrepareJustifications
-		e.innerErr = err
-		return e
+		return justificationsDecodeError(ErrMalformedPrepareJustifications, err)
 	}
 
 	// Rule: Can only exist for Proposal messages
@@ -455,9 +454,7 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 
 	rcj, err := message.GetRoundChangeJustifications()
 	if err != nil {
-		e := ErrMalformedRoundChangeJustifications
-		e.innerErr = err
-		return e
+		return justificationsDecodeError(ErrMalformedRoundChangeJustifications, err)
 	}
 
 	// Rule: Can only exist for Proposal or Round-Change messages
@@ -468,6 +465,17 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 	}
 
 	return nil
+}
+
+// justificationsDecodeError is malformed with err as its cause, except for a justification with full data, which
+// ssv-spec#673 made a decoding error: that one is ErrJustificationWithFullData.
+func justificationsDecodeError(malformed Error, err error) error {
+	var specErr *spectypes.Error
+	if errors.As(err, &specErr) && specErr.Code == spectypes.JustificationWithFullDataErrorCode {
+		return ErrJustificationWithFullData
+	}
+	malformed.innerErr = err
+	return malformed
 }
 
 func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {

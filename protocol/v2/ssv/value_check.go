@@ -129,7 +129,7 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	// re-runs this check on re-proposals and the decided value — and without one the check is skipped
 	// (SIP #94 §2, issue #3035).
 	if bv.AttestationDataIndex == 1 && v.sameSlotBlockRoot != nil && bv.BlockRoot == *v.sameSlotBlockRoot {
-		return spectypes.NewError(spectypes.BeaconVoteInvalidIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
+		return spectypes.NewError(spectypes.BeaconVoteSameSlotIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -371,6 +371,11 @@ func checkValidatorConsensusData(
 		if err != nil {
 			return cd, nil, spectypes.WrapError(spectypes.UnmarshalSSZErrorCode, fmt.Errorf("failed decoding gloas proposal data: %w", err))
 		}
+		// Decoding doesn't bound the block's lists, and the beacon chain rejects a block over any of their limits
+		// (SIP #94 §4), so such a value fails consensus instead of losing the slot.
+		if err := proposal.ValidateListLimits(); err != nil {
+			return cd, nil, spectypes.WrapError(spectypes.QBFTValueInvalidErrorCode, fmt.Errorf("gloas block lists: %w", err))
+		}
 		// Pin the block's own slot to the duty slot: the block is signed under block.Slot and slashing
 		// protection keys on it, so a leader that decoupled the two could harvest a signature for another
 		// slot — an equivocation the slashing DB would miss. Also bounds block.Slot to the far-future check.
@@ -382,6 +387,15 @@ func checkValidatorConsensusData(
 		// slot, so the value fails consensus instead (SIP #94 §4).
 		if proposal.Block.ProposerIndex != cd.Duty.ValidatorIndex {
 			return cd, nil, spectypes.NewError(spectypes.ProposerBlockProposerIndexMismatchErrorCode, "gloas block proposer index does not match duty validator index")
+		}
+		// The bid must be this block's, for its slot and on its parent: the beacon chain rejects any other
+		// (process_execution_payload_bid), so the value fails consensus instead of losing the slot.
+		bid := proposal.Block.Body.SignedExecutionPayloadBid.Message
+		if bid.Slot != proposal.Block.Slot {
+			return cd, nil, spectypes.NewError(spectypes.ProposerBidSlotMismatchErrorCode, "gloas bid slot does not match block slot")
+		}
+		if bid.ParentBlockRoot != proposal.Block.ParentRoot {
+			return cd, nil, spectypes.NewError(spectypes.ProposerBidParentRootMismatchErrorCode, "gloas bid parent block root does not match block parent root")
 		}
 		// payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value carries
 		// the §6 payload_root every operator derives the envelope to sign from, an external bid carries

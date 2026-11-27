@@ -440,14 +440,9 @@ func TestProposalWithUnpreparedRoundChangeJustificationsStillValid(t *testing.T)
 	require.NoError(t, env.inst.BaseMsgValidation(proposal))
 }
 
-// The full-data rule applies only to round changes received on their own, so a proposal embedding an
-// unprepared round change that carries FullData stays valid. When the spec pin
-// includes ssv-spec#673, Message.Validate refuses such an embedded justification with the spec's
-// JustificationWithFullDataErrorCode, so the GetRoundChangeJustifications pre-check below fails first
-// and this test should expect that error instead.
-// The unprepared round change full-data check runs only on round changes received on their own,
-// but a proposal that embeds one with full data is still refused: validateMsg refuses full data in
-// any justification. Leaders never build one, since MarshalJustifications strips full data.
+// The unprepared round change full-data check runs only on round changes received on their own, but a proposal
+// that embeds one with full data is still refused: Message.Validate refuses full data in any justification
+// (ssv-spec#673). Leaders never build one, since MarshalJustifications strips full data.
 func TestProposalWithUnpreparedRoundChangeJustificationWithFullDataRejected(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	env.setLeader(1)
@@ -477,11 +472,10 @@ func TestProposalWithUnpreparedRoundChangeJustificationWithFullDataRejected(t *t
 		RoundChangeJustification: justifications,
 	}, 1, value)
 
-	embedded, err := proposal.QBFTMessage.GetRoundChangeJustifications()
-	require.NoError(t, err)
-	require.Equal(t, []byte("junk"), embedded[0].FullData)
-
-	require.ErrorContains(t, env.inst.BaseMsgValidation(proposal), "justification with full data")
+	err := env.inst.BaseMsgValidation(proposal)
+	var specErr *spectypes.Error
+	require.ErrorAs(t, err, &specErr)
+	require.Equal(t, spectypes.JustificationWithFullDataErrorCode, specErr.Code)
 }
 
 func TestValidRoundChangeForDataIgnoreSignatureRejectsInvalidPreparedJustification(t *testing.T) {

@@ -33,6 +33,46 @@ func DecodeGloasProposalData(dataSSZ []byte) (*GloasProposalData, error) {
 	return d, nil
 }
 
+// ValidateListLimits is ssv-spec's gloas.BeaconBlock.ValidateListLimits for the node's block type: it checks each
+// of the block's lists against its Gloas limit. The lists are progressive (EIP-7916), so decoding bounds none, and
+// the beacon chain rejects a block over any of them: a cluster that signed one would lose the slot.
+func (d *GloasProposalData) ValidateListLimits() error {
+	if d.Block == nil || d.Block.Body == nil {
+		return fmt.Errorf("nil block body")
+	}
+	body := d.Block.Body
+	type listLimit struct {
+		name       string
+		len, limit int
+	}
+	lists := []listLimit{
+		{"proposer slashings", len(body.ProposerSlashings), specgloas.MaxProposerSlashings},
+		{"attester slashings", len(body.AttesterSlashings), specgloas.MaxAttesterSlashings},
+		{"attestations", len(body.Attestations), specgloas.MaxAttestations},
+		{"deposits", len(body.Deposits), specgloas.MaxDeposits},
+		{"voluntary exits", len(body.VoluntaryExits), specgloas.MaxVoluntaryExits},
+		{"BLS to execution changes", len(body.BLSToExecutionChanges), specgloas.MaxBLSToExecutionChanges},
+		{"payload attestations", len(body.PayloadAttestations), specgloas.MaxPayloadAttestations},
+	}
+	if requests := body.ParentExecutionRequests; requests != nil {
+		lists = append(lists,
+			listLimit{"withdrawal requests", len(requests.Withdrawals), specgloas.MaxWithdrawalRequestsPerPayload},
+			listLimit{"consolidation requests", len(requests.Consolidations), specgloas.MaxConsolidationRequestsPerPayload},
+			listLimit{"builder deposit requests", len(requests.BuilderDeposits), specgloas.MaxBuilderDepositRequestsPerPayload},
+			listLimit{"builder exit requests", len(requests.BuilderExits), specgloas.MaxBuilderExitRequestsPerPayload},
+		)
+	}
+	if bid := body.SignedExecutionPayloadBid; bid != nil && bid.Message != nil {
+		lists = append(lists, listLimit{"blob KZG commitments", len(bid.Message.BlobKZGCommitments), specgloas.MaxBlobCommitmentsPerBlock})
+	}
+	for _, list := range lists {
+		if list.len > list.limit {
+			return fmt.Errorf("%d %s, over the limit of %d", list.len, list.name, list.limit)
+		}
+	}
+	return nil
+}
+
 // SelfBuild reports whether the decided block commits to a self-built payload (BUILDER_INDEX_SELF_BUILD)
 // rather than an external builder's bid (SIP #94 §4).
 func (d *GloasProposalData) SelfBuild() bool {

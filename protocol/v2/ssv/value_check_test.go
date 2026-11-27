@@ -158,7 +158,9 @@ func TestGloasVoteChecker_SameSlotIndex(t *testing.T) {
 	sameSlot := expected.BlockRoot
 	checker := NewGloasVoteChecker(fakeSlashingSigner{}, 64, []phase0.BLSPubKey{{}}, expected, &sameSlot)
 
-	require.ErrorContains(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 1))), "same-slot block")
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 1))), &specErr)
+	require.Equal(t, spectypes.BeaconVoteSameSlotIndexErrorCode, specErr.Code)
 	require.NoError(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 0))))
 
 	otherBlock := gloasVote(1, 2, 1)
@@ -325,6 +327,45 @@ func TestProposerChecker_GloasProposerIndexMismatch(t *testing.T) {
 	var specErr *spectypes.Error
 	require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
 	require.Equal(t, spectypes.ProposerBlockProposerIndexMismatchErrorCode, specErr.Code)
+}
+
+// The bid must be the block's, for its slot and on its parent (SIP #94 §4): the beacon chain rejects a block whose
+// bid names another, so such a value is rejected.
+func TestProposerChecker_GloasBidMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	for name, tc := range map[string]struct {
+		edit func(bid *gloas.ExecutionPayloadBid)
+		code int
+	}{
+		"slot":        {func(bid *gloas.ExecutionPayloadBid) { bid.Slot++ }, spectypes.ProposerBidSlotMismatchErrorCode},
+		"parent root": {func(bid *gloas.ExecutionPayloadBid) { bid.ParentBlockRoot = phase0.Root{0x01} }, spectypes.ProposerBidParentRootMismatchErrorCode},
+	} {
+		t.Run(name, func(t *testing.T) {
+			block := gloasProposerBlock(gloasProposerSlot)
+			tc.edit(block.Body.SignedExecutionPayloadBid.Message)
+			value := encodeGloasProposal(t, &gloas.GloasProposalData{Block: block, PayloadRoot: phase0.Root{0x50}})
+
+			var specErr *spectypes.Error
+			require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
+			require.Equal(t, tc.code, specErr.Code)
+		})
+	}
+}
+
+// A block over one of its list limits is rejected (SIP #94 §4): the beacon chain would reject it.
+func TestProposerChecker_GloasListLimit(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	block := gloasProposerBlock(gloasProposerSlot)
+	block.Body.VoluntaryExits = make([]*phase0.SignedVoluntaryExit, 17) // MAX_VOLUNTARY_EXITS + 1
+	for i := range block.Body.VoluntaryExits {
+		block.Body.VoluntaryExits[i] = &phase0.SignedVoluntaryExit{Message: &phase0.VoluntaryExit{}}
+	}
+	value := encodeGloasProposal(t, &gloas.GloasProposalData{Block: block, PayloadRoot: phase0.Root{0x50}})
+
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
+	require.Equal(t, spectypes.QBFTValueInvalidErrorCode, specErr.Code)
+	require.ErrorContains(t, specErr, "voluntary exits")
 }
 
 // payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value without one

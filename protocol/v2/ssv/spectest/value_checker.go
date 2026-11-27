@@ -42,6 +42,8 @@ func (test *ValCheckSpecTest) Run(t *testing.T) {
 		signer = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManagerWithSlashableSlots(slashableSlots))
 	}
 
+	// The node's view names one block for the slot (see NewGloasVoteChecker).
+	require.LessOrEqual(t, len(test.SameSlotBlockRoots), 1, "more than one same-slot block root")
 	check := test.valCheckF(signer)
 	require.NotNil(t, check, "value checker should not be nil")
 
@@ -114,12 +116,16 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 		// select by the duty slot's fork, exactly as the committee runner does in production
 		// (specGloasForkEpoch sets which vectors are Gloas-era).
 		if beaconConfig.IsGloasAtSlot(test.DutySlot) {
+			var sameSlotBlockRoot *phase0.Root
+			if len(test.SameSlotBlockRoots) > 0 {
+				sameSlotBlockRoot = &test.SameSlotBlockRoots[0]
+			}
 			checker := ssv.NewGloasVoteChecker(
 				signer,
 				test.DutySlot,
 				sharePubKeys,
 				&gloas.GloasBeaconVote{Source: &test.ExpectedSource, Target: &test.ExpectedTarget},
-				nil, // the vectors carry no head events, so no own view for the same-slot check
+				sameSlotBlockRoot,
 			)
 			return checker.CheckValue
 		}
