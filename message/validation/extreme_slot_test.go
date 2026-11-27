@@ -93,7 +93,7 @@ func TestExtremeSlotsReachSlotBound(t *testing.T) {
 	// Roles without a consensus phase reject every consensus kind by the same check before the slot bound, so
 	// one kind covers them.
 	noConsensus := []spectypes.RunnerRole{
-		spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit, spectypes.RolePTCAttester, spectypes.RoleProposerPreferences,
+		ssvtypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit, spectypes.RolePTCAttester, spectypes.RoleProposerPreferences,
 	}
 
 	proposalData := spectestingutils.TestingQBFTFullData

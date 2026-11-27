@@ -513,8 +513,8 @@ func ssvMessageFactory(role spectypes.RunnerRole) func(*spectypes.SignedSSVMessa
 		return testingutils.SSVMsgAggregator
 	case types.RoleSyncCommitteeContribution:
 		return testingutils.SSVMsgSyncCommitteeContribution
-	case spectypes.RoleValidatorRegistration:
-		return testingutils.SSVMsgValidatorRegistration
+	case types.RoleValidatorRegistration:
+		return ssvtestingutils.SSVMsgValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		return testingutils.SSVMsgVoluntaryExit
 	default:

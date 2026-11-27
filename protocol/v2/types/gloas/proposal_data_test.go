@@ -3,6 +3,8 @@ package gloas
 import (
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
@@ -39,6 +41,26 @@ func TestGloasProposalDataMatchesSpecWire(t *testing.T) {
 func TestDecodeGloasProposalDataRejectsGarbage(t *testing.T) {
 	_, err := DecodeGloasProposalData([]byte("garbage"))
 	require.Error(t, err)
+}
+
+// ValidateListLimits holds the block body's lists, the parent's execution requests and the bid's blob
+// commitments to their Gloas limits. ssv-spec's value-check vectors pin each limit.
+func TestGloasProposalDataValidateListLimits(t *testing.T) {
+	require.NoError(t, (&GloasProposalData{Block: TestingBeaconBlock(8)}).ValidateListLimits())
+
+	exits := TestingBeaconBlock(8)
+	exits.Body.VoluntaryExits = make([]*phase0.SignedVoluntaryExit, specgloas.MaxVoluntaryExits+1)
+	require.ErrorContains(t, (&GloasProposalData{Block: exits}).ValidateListLimits(), "17 voluntary exits")
+
+	withdrawals := TestingBeaconBlock(8)
+	withdrawals.Body.ParentExecutionRequests.Withdrawals = make([]*electra.WithdrawalRequest, specgloas.MaxWithdrawalRequestsPerPayload+1)
+	require.ErrorContains(t, (&GloasProposalData{Block: withdrawals}).ValidateListLimits(), "17 withdrawal requests")
+
+	commitments := TestingBeaconBlock(8)
+	commitments.Body.SignedExecutionPayloadBid.Message.BlobKZGCommitments = make([]deneb.KZGCommitment, specgloas.MaxBlobCommitmentsPerBlock+1)
+	require.ErrorContains(t, (&GloasProposalData{Block: commitments}).ValidateListLimits(), "4097 blob KZG commitments")
+
+	require.Error(t, (&GloasProposalData{Block: &BeaconBlock{}}).ValidateListLimits())
 }
 
 func TestGloasProposalDataSelfBuild(t *testing.T) {

@@ -24,14 +24,14 @@ type voteChecker struct {
 	signer          ekm.BeaconSigner
 	slot            phase0.Slot
 	sharePublicKeys []phase0.BLSPubKey
-	expectedVote    *spectypes.BeaconVote
+	expectedVote    *ssvtypes.PreGloasBeaconVote
 }
 
 func NewVoteChecker(
 	signer ekm.BeaconSigner,
 	slot phase0.Slot,
 	sharePublicKeys []phase0.BLSPubKey,
-	expectedVote *spectypes.BeaconVote,
+	expectedVote *ssvtypes.PreGloasBeaconVote,
 ) ValueChecker {
 	return &voteChecker{
 		signer:          signer,
@@ -42,7 +42,7 @@ func NewVoteChecker(
 }
 
 func (v *voteChecker) CheckValue(value []byte) error {
-	bv := spectypes.BeaconVote{}
+	bv := ssvtypes.PreGloasBeaconVote{}
 	if err := bv.Decode(value); err != nil {
 		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 	}
@@ -115,7 +115,7 @@ func NewGloasVoteChecker(
 func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	bv := gloas.GloasBeaconVote{}
 	if err := bv.Decode(value); err != nil {
-		return spectypes.WrapError(spectypes.DecodeGloasBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
+		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
 	}
 
 	if err := bv.Validate(); err != nil {
@@ -129,7 +129,7 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	// re-runs this check on re-proposals and the decided value — and without one the check is skipped
 	// (SIP #94 §2, issue #3035).
 	if bv.AttestationDataIndex == 1 && v.sameSlotBlockRoot != nil && bv.BlockRoot == *v.sameSlotBlockRoot {
-		return spectypes.NewError(spectypes.GloasBeaconVoteInvalidIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
+		return spectypes.NewError(spectypes.BeaconVoteSameSlotIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -160,10 +160,19 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
-type aggregatorCommitteeChecker struct{}
+type aggregatorCommitteeChecker struct {
+	beaconConfig    *networkconfig.Beacon
+	runningDutySlot func() phase0.Slot
+}
 
-func NewAggregatorCommitteeChecker() ValueChecker {
-	return &aggregatorCommitteeChecker{}
+// NewAggregatorCommitteeChecker validates the aggregator committee's consensus value. runningDutySlot reports the
+// slot of the duty the runner is running, whose fork the value's Version must name. The pin is skipped when
+// runningDutySlot is nil (isolated value checks) or reports 0 (no duty started yet).
+func NewAggregatorCommitteeChecker(beaconConfig *networkconfig.Beacon, runningDutySlot func() phase0.Slot) ValueChecker {
+	return &aggregatorCommitteeChecker{
+		beaconConfig:    beaconConfig,
+		runningDutySlot: runningDutySlot,
+	}
 }
 
 func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
@@ -174,7 +183,20 @@ func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
 		)
 	}
-	if err := cd.Validate(); err != nil {
+
+	// The leader stamps Version, and the fork it names picks how the attestations decode and which roots the
+	// aggregators sign. Gloas and Electra attestations encode alike but merkleize differently, so a value naming
+	// another fork than the slot's would pass validation and have the cluster sign aggregates the beacon node
+	// rejects. Honest leaders stamp the slot's fork.
+	if v.runningDutySlot != nil {
+		if slot := v.runningDutySlot(); slot != 0 {
+			if want, _ := v.beaconConfig.ForkAtEpoch(v.beaconConfig.EstimatedEpochAtSlot(slot)); cd.Version != want {
+				return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "value version does not match slot fork")
+			}
+		}
+	}
+
+	if err := ssvtypes.ValidateAggregatorCommitteeConsensusData(cd); err != nil {
 		return fmt.Errorf("invalid value: %w", err)
 	}
 
@@ -271,7 +293,7 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 		// node-side value and verified block.Slot == duty slot, so reuse it rather than decode again.
 		slot = gloasProposal.Block.Slot
 	} else {
-		blockData, _, bdErr := cd.GetBlockData()
+		blockData, _, bdErr := ssvtypes.PreGloasBlockData(cd)
 		if bdErr != nil {
 			return fmt.Errorf("could not get block data: %w", bdErr)
 		}
@@ -358,18 +380,23 @@ func checkValidatorConsensusData(
 	var gloasProposal *gloas.GloasProposalData
 	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
 		// The leader-stamped Version must equal the slot's fork (SIP #94 §4). ssv-spec's ProposerValueCheckF
-		// branches to Gloas on cd.Version, whereas we branch on the slot; without this pin a value on a
+		// accepts only a Gloas Version, whereas we pick the fork from the slot; without this pin a value on a
 		// Gloas slot carrying another Version would be accepted here (slot-based) but rejected there
 		// (version-based), splitting the value check across a mixed cluster. Honest proposers always stamp
 		// Version == the slot's fork. (The reverse, a Gloas Version on a pre-Gloas slot, takes the else
-		// branch and is rejected by GetBlockData's unknown-version error.)
+		// branch and is rejected by PreGloasBlockData's unknown-version error.)
 		if cd.Version != networkconfig.DataVersionGloas {
 			return cd, nil, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "value version does not match slot fork")
 		}
-		// Gloas values are opaque to ValidateConsensusData's GetBlockData path; decode the §4 wrapper here.
+		// Gloas values are opaque to ValidateConsensusData's pre-Gloas decoding; decode the §4 wrapper here.
 		proposal, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
 		if err != nil {
 			return cd, nil, spectypes.WrapError(spectypes.UnmarshalSSZErrorCode, fmt.Errorf("failed decoding gloas proposal data: %w", err))
+		}
+		// Decoding doesn't bound the block's lists, and the beacon chain rejects a block over any of their limits
+		// (SIP #94 §4), so such a value fails consensus instead of losing the slot.
+		if err := proposal.ValidateListLimits(); err != nil {
+			return cd, nil, spectypes.WrapError(spectypes.QBFTValueInvalidErrorCode, fmt.Errorf("gloas block lists: %w", err))
 		}
 		// Pin the block's own slot to the duty slot: the block is signed under block.Slot and slashing
 		// protection keys on it, so a leader that decoupled the two could harvest a signature for another
@@ -382,6 +409,15 @@ func checkValidatorConsensusData(
 		// slot, so the value fails consensus instead (SIP #94 §4).
 		if proposal.Block.ProposerIndex != cd.Duty.ValidatorIndex {
 			return cd, nil, spectypes.NewError(spectypes.ProposerBlockProposerIndexMismatchErrorCode, "gloas block proposer index does not match duty validator index")
+		}
+		// The bid must be this block's, for its slot and on its parent: the beacon chain rejects any other
+		// (process_execution_payload_bid), so the value fails consensus instead of losing the slot.
+		bid := proposal.Block.Body.SignedExecutionPayloadBid.Message
+		if bid.Slot != proposal.Block.Slot {
+			return cd, nil, spectypes.NewError(spectypes.ProposerBidSlotMismatchErrorCode, "gloas bid slot does not match block slot")
+		}
+		if bid.ParentBlockRoot != proposal.Block.ParentRoot {
+			return cd, nil, spectypes.NewError(spectypes.ProposerBidParentRootMismatchErrorCode, "gloas bid parent block root does not match block parent root")
 		}
 		// payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value carries
 		// the §6 payload_root every operator derives the envelope to sign from, an external bid carries

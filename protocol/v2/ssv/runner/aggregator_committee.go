@@ -82,14 +82,13 @@ func NewAggregatorCommitteeRunner(
 		return nil, errors.New("no shares")
 	}
 
-	return &AggregatorCommitteeRunner{
+	r := &AggregatorCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleAggregatorCommittee,
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 			QBFTController: opts.QBFTController,
 		},
-		ValCheck:                              ssv.NewAggregatorCommitteeChecker(),
 		beacon:                                opts.Beacon,
 		network:                               opts.Network,
 		signer:                                opts.Signer,
@@ -100,7 +99,23 @@ func NewAggregatorCommitteeRunner(
 		preConsensusDutiesCheckedForSelection: make(map[phase0.ValidatorIndex]map[[32]byte]struct{}),
 
 		IsAggregator: opts.Beacon.IsAggregator,
-	}, nil
+	}
+	r.ValCheck = ssv.NewAggregatorCommitteeChecker(opts.NetworkConfig.Beacon, r.RunningDutySlot)
+
+	return r, nil
+}
+
+// RunningDutySlot is the slot of the duty this runner last started, or 0 before its first duty (or on a nil
+// runner). The value check pins the value's Version to its fork.
+func (r *AggregatorCommitteeRunner) RunningDutySlot() phase0.Slot {
+	if r == nil || r.BaseRunner == nil {
+		return 0
+	}
+	slot, err := r.currentDutySlot()
+	if err != nil {
+		return 0
+	}
+	return slot
 }
 
 func (r *AggregatorCommitteeRunner) StartNewDuty(
@@ -638,7 +653,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
-	if err := consensusData.Validate(); err != nil {
+	if err := ssvtypes.ValidateAggregatorCommitteeConsensusData(consensusData); err != nil {
 		// Not markDutyFailed: this pre-consensus window is re-entrant until consensus starts
 		// (guarded by HasStartedConsensus). basePreConsensusMsgProcessing reports a new quorum
 		// per root, not once per duty, and a Validate error is non-retryable so the committee
@@ -714,7 +729,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
-	aggProofs, err := consensusData.GetAggregateAndProofs()
+	aggProofs, err := ssvtypes.GetAggregateAndProofs(consensusData)
 	if err != nil {
 		return fmt.Errorf("failed to get aggregate and proofs: %w", err)
 	}
@@ -737,7 +752,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		}
 
 		// Sign the aggregate and proof
-		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggProof)
+		hashRoot, err := ssvtypes.GetAggregateAndProofHashRoot(aggProof)
 		if err != nil {
 			return fmt.Errorf("failed to get aggregate and proof hash root: %w", err)
 		}
@@ -1406,7 +1421,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
 
-	aggregateAndProofs, err := consensusData.GetAggregateAndProofs()
+	aggregateAndProofs, err := ssvtypes.GetAggregateAndProofs(consensusData)
 	if err != nil {
 		return nil, nil, nil,
 			fmt.Errorf("could not get aggregate and proofs: %w", err)
@@ -1414,7 +1429,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 
 	for i, aggregateAndProof := range aggregateAndProofs {
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
-		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggregateAndProof)
+		hashRoot, err := ssvtypes.GetAggregateAndProofHashRoot(aggregateAndProof)
 		if err != nil {
 			// This runs on already-decided data, so a failure here is not a per-validator "no duty"
 			// condition — it is a malformed object or (for DomainData) a transient beacon error that

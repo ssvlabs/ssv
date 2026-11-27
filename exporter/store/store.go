@@ -14,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/traces"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -96,7 +97,7 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *traces.ValidatorDutyTrace) error
 	role, slot, index := dto.Role, dto.Slot, dto.Validator
 	prefix := s.makeValidatorPrefix(slot, role, index)
 
-	ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
+	ctx := fmt.Sprintf("role=%s slot=%d index=%d", ssvtypes.BeaconRoleToString(role), slot, index)
 	value, err := dto.MarshalSSZ()
 	if err != nil {
 		return fmt.Errorf("marshal validator duty (%s): %w", ctx, err)
@@ -117,7 +118,7 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace
 	for _, duty := range duties {
 		value, err := duty.MarshalSSZ()
 		if err != nil {
-			skipped = errors.Join(skipped, fmt.Errorf("marshal validator duty (role=%s slot=%d index=%d): %w", duty.Role, duty.Slot, duty.Validator, err))
+			skipped = errors.Join(skipped, fmt.Errorf("marshal validator duty (role=%s slot=%d index=%d): %w", ssvtypes.BeaconRoleToString(duty.Role), duty.Slot, duty.Validator, err))
 			continue
 		}
 		objs = append(objs, basedb.Obj{
@@ -133,7 +134,7 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace
 
 func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	prefix := s.makeValidatorPrefix(slot, role, index)
-	ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
+	ctx := fmt.Sprintf("role=%s slot=%d index=%d", ssvtypes.BeaconRoleToString(role), slot, index)
 
 	obj, found, err := s.db.Get(prefix, nil)
 	if err != nil {
@@ -156,7 +157,7 @@ func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phas
 	var errs *multierror.Error
 
 	prefix := s.makeValidatorPrefix(slot, role)
-	ctx := fmt.Sprintf("role=%s slot=%d", role, slot)
+	ctx := fmt.Sprintf("role=%s slot=%d", ssvtypes.BeaconRoleToString(role), slot)
 
 	iterationError := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
 		duty := new(traces.ValidatorDutyTrace)

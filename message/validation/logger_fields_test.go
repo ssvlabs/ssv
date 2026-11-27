@@ -496,7 +496,7 @@ func TestBuildLoggerFields_DutyID(t *testing.T) {
 		// Every per-validator role of validRoleUnion renders exactly what the duty scheduler and the runners
 		// render — the shared builder's form, never the spec's _RUNNER-suffixed role name.
 		for _, role := range []spectypes.RunnerRole{
-			spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit,
+			spectypes.RoleProposer, ssvtypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit,
 			ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution,
 			spectypes.RolePTCAttester, spectypes.RoleProposerPreferences,
 		} {

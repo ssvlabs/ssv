@@ -111,7 +111,7 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 
 			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 				{
-					Type:           spectypes.BNRoleValidatorRegistration,
+					Type:           types.BNRoleValidatorRegistration,
 					PubKey:         validatorPk1,
 					ValidatorIndex: validatorIndex1,
 					Slot:           slot,
@@ -175,7 +175,7 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 
 			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 				{
-					Type:           spectypes.BNRoleValidatorRegistration,
+					Type:           types.BNRoleValidatorRegistration,
 					PubKey:         validatorPk,
 					ValidatorIndex: validatorIndex,
 					// Slot is the shared duty slot — what gets signed;
@@ -228,7 +228,7 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
 			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 				{
-					Type:           spectypes.BNRoleValidatorRegistration,
+					Type:           types.BNRoleValidatorRegistration,
 					PubKey:         validatorPk,
 					ValidatorIndex: validatorIndex,
 					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
@@ -282,13 +282,13 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
 			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 				{
-					Type:           spectypes.BNRoleValidatorRegistration,
+					Type:           types.BNRoleValidatorRegistration,
 					PubKey:         validatorPk1,
 					ValidatorIndex: validatorIndex1,
 					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
 				},
 				{
-					Type:           spectypes.BNRoleValidatorRegistration,
+					Type:           types.BNRoleValidatorRegistration,
 					PubKey:         validatorPk2,
 					ValidatorIndex: validatorIndex2,
 					Slot:           slot + validatorRegistrationDutySlotsToPostpone,

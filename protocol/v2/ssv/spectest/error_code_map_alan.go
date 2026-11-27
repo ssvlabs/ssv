@@ -4,6 +4,7 @@ package spectest
 
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -94,7 +95,7 @@ var AlanExpectedErrorCodeMap = map[int]int{
 	AlanWrongMessageHeightErrorCode:                         spectypes.WrongMessageHeightErrorCode,
 	AlanSignerIsNotInCommitteeErrorCode:                     spectypes.SignerIsNotInCommitteeErrorCode,
 	AlanNonUniqueSignerErrorCode:                            spectypes.NonUniqueSignerErrorCode,
-	AlanValidatorRegistrationNoConsensusDataErrorCode:       spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode,
+	AlanValidatorRegistrationNoConsensusDataErrorCode:       ssvtypes.ValidatorRegistrationNoConsensusPhaseErrorCode,
 	AlanValidatorExitNoConsensusDataErrorCode:               spectypes.ValidatorExitNoConsensusPhaseErrorCode,
 	AlanUnknownDutyRoleDataErrorCode:                        spectypes.UnknownDutyRoleDataErrorCode,
 	AlanUnknownBlockVersionErrorCode:                        spectypes.UnknownBlockVersionErrorCode,
@@ -121,8 +122,8 @@ var AlanExpectedErrorCodeMap = map[int]int{
 	AlanReconstructSignatureErrorCode:                       spectypes.ReconstructSignatureErrorCode,
 	AlanSlashableAttestationErrorCode:                       spectypes.SlashableAttestationErrorCode,
 	AlanDecidedWrongInstanceErrorCode:                       spectypes.DecidedWrongInstanceErrorCode,
-	AlanValidatorRegistrationNoConsensusPhaseErrorCode:      spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode,
-	AlanValidatorRegistrationNoPostConsensusPhaseErrorCode:  spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode,
+	AlanValidatorRegistrationNoConsensusPhaseErrorCode:      ssvtypes.ValidatorRegistrationNoConsensusPhaseErrorCode,
+	AlanValidatorRegistrationNoPostConsensusPhaseErrorCode:  ssvtypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode,
 	AlanValidatorExitNoConsensusPhaseErrorCode:              spectypes.ValidatorExitNoConsensusPhaseErrorCode,
 	AlanValidatorExitNoPostConsensusPhaseErrorCode:          spectypes.ValidatorExitNoPostConsensusPhaseErrorCode,
 	AlanSSVMessageHasInvalidSignatureErrorCode:              spectypes.SSVMessageHasInvalidSignatureErrorCode,

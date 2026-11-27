@@ -453,7 +453,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		// operator's own produced envelope, the payload and blobs go now rather than at the next proposal.
 		r.matchProducedEnvelope(logger, proposalData)
 	} else {
-		versionedBlock, signingRoot, err := cd.GetBlockData()
+		versionedBlock, signingRoot, err := ssvtypes.PreGloasBlockData(cd)
 		if err != nil {
 			return fmt.Errorf("could not get block data from consensus data: %w", err)
 		}
@@ -578,7 +578,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// A beacon node lacking the payload (no builder, another relay, or another operator's local block)
 	// can't publish it, so a failed submit of a block this operator's beacon node didn't produce is
 	// expected: it concludes the duty not_published rather than failed.
-	vBlk, _, err := validatorConsensusData.GetBlockData()
+	vBlk, _, err := ssvtypes.PreGloasBlockData(validatorConsensusData)
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
@@ -988,7 +988,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomains(context.Context) (
 		return gloasPostConsensusRoots(proposalData)
 	}
 
-	_, root, err := validatorConsensusData.GetBlockData()
+	_, root, err := ssvtypes.PreGloasBlockData(validatorConsensusData)
 	if err != nil {
 		return nil, fmt.Errorf("could not get block data: %w", err)
 	}

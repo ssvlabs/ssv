@@ -102,7 +102,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// Rule: If role is invalid
 	if !mv.validRoleAtSlot(role, slot) {
 		e := ErrInvalidRole
-		e.got = fmt.Sprintf("%v (%d) @ slot %v", role, role, slot)
+		e.got = fmt.Sprintf("%v (%d) @ slot %v", ssvtypes.RunnerRoleToString(role), role, slot)
 		return e
 	}
 
@@ -211,7 +211,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	// Rule: validator registrations end at the Gloas fork (SIP #94 §5). One with a Gloas slot is rejected by
 	// validRoleAtSlot; from the epoch after the fork, one with any slot can only be a replay, as registrations
 	// have no lateness limit. IGNORE, not REJECT: the condition comes from the local clock, not the message.
-	if role == spectypes.RoleValidatorRegistration && mv.registrationsRetired(receivedAt) {
+	if role == ssvtypes.RoleValidatorRegistration && mv.registrationsRetired(receivedAt) {
 		return ErrValidatorRegistrationRetired
 	}
 
@@ -350,7 +350,7 @@ func validatePartialSignatureMessageLimit(
 	peerState := signerState.peekPeer(receivedFrom)
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
+		ssvtypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
 		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		if peerState.SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
@@ -477,7 +477,7 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.RandaoPartialSig,
 		ssvtypes.SelectionProofPartialSig,
 		ssvtypes.ContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig,
+		ssvtypes.ValidatorRegistrationPartialSig,
 		spectypes.VoluntaryExitPartialSig,
 		spectypes.AggregatorCommitteePartialSig,
 		spectypes.PTCAttesterPartialSig,
@@ -499,8 +499,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.ContributionProofs
-	case spectypes.RoleValidatorRegistration:
-		return msgType == spectypes.ValidatorRegistrationPartialSig
+	case ssvtypes.RoleValidatorRegistration:
+		return msgType == ssvtypes.ValidatorRegistrationPartialSig
 	case spectypes.RoleVoluntaryExit:
 		return msgType == spectypes.VoluntaryExitPartialSig
 	case spectypes.RoleAggregatorCommittee:

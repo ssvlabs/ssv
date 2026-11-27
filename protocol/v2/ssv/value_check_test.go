@@ -7,15 +7,18 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check at
-// value_check.go:47.
+// TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check in
+// PreGloasBeaconVote.Validate, which the voteChecker applies.
 //
 // The current implementation uses `source.Epoch >= target.Epoch` to reject the BeaconVote,
 // which is stricter than the Ethereum consensus-specs validity rule for attestations. Per
@@ -44,7 +47,7 @@ import (
 // by the fix.
 func TestVoteCheckerSourceTargetEpoch(t *testing.T) {
 	t.Run("genesis: source.Epoch == target.Epoch == 0 currently rejected (B1 bug)", func(t *testing.T) {
-		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &spectypes.BeaconVote{})
+		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &ssvtypes.PreGloasBeaconVote{})
 		err := checker.CheckValue(encodeBeaconVote(t, 0, 0))
 		require.ErrorContains(t, err, "source >= target")
 		// TODO(B1 fix): once the fix lands, this assertion should flip — at minimum
@@ -52,19 +55,19 @@ func TestVoteCheckerSourceTargetEpoch(t *testing.T) {
 	})
 
 	t.Run("source.Epoch > target.Epoch is rejected (unchanged by the B1 fix)", func(t *testing.T) {
-		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &spectypes.BeaconVote{})
+		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &ssvtypes.PreGloasBeaconVote{})
 		err := checker.CheckValue(encodeBeaconVote(t, 1, 0))
 		require.ErrorContains(t, err, "source >= target")
 	})
 }
 
-// encodeBeaconVote returns SSZ bytes for a BeaconVote with the requested source/target epochs
+// encodeBeaconVote returns SSZ bytes for a pre-Gloas BeaconVote with the requested source/target epochs
 // and zero block root. Suitable for tests that exercise the source/target gate, which fires
 // before any downstream check (slashing or expected-vote) so a nil signer/expectedVote on the
 // voteChecker is fine.
 func encodeBeaconVote(t *testing.T, sourceEpoch, targetEpoch phase0.Epoch) []byte {
 	t.Helper()
-	bv := &spectypes.BeaconVote{
+	bv := &ssvtypes.PreGloasBeaconVote{
 		BlockRoot: phase0.Root{},
 		Source:    &phase0.Checkpoint{Epoch: sourceEpoch},
 		Target:    &phase0.Checkpoint{Epoch: targetEpoch},
@@ -72,6 +75,46 @@ func encodeBeaconVote(t *testing.T, sourceEpoch, targetEpoch phase0.Epoch) []byt
 	data, err := bv.Encode()
 	require.NoError(t, err)
 	return data
+}
+
+// The value's Version must be the running duty slot's fork: Gloas and Electra attestations encode alike, so the
+// same value validates under either, and only the slot tells which roots the aggregators must sign. A value naming
+// another fork is rejected; with no running duty (nil, or 0 before one starts) the pin is skipped.
+func TestAggregatorCommitteeChecker_VersionPinnedToSlotFork(t *testing.T) {
+	const gloasEpoch = 10 // past the test network's Fulu fork
+	cfg := networkconfig.TestNetworkWithGloas(gloasEpoch).Beacon
+	gloasSlot := cfg.FirstSlotAtEpoch(gloasEpoch)
+	fuluSlot := gloasSlot - 1
+
+	duty := ssvtestingutils.TestingAggregatorCommitteeDuty([]int{spectestingutils.TestingValidatorIndex}, nil, spec.DataVersionFulu)
+	cd := ssvtestingutils.TestAggregatorCommitteeConsensusDataForDuty(duty, spec.DataVersionFulu, nil)
+	value := func(version spec.DataVersion) []byte {
+		cd.Version = version
+		encoded, err := cd.Encode()
+		require.NoError(t, err)
+		return encoded
+	}
+	check := func(running phase0.Slot, version spec.DataVersion) error {
+		return NewAggregatorCommitteeChecker(cfg, func() phase0.Slot { return running }).CheckValue(value(version))
+	}
+
+	require.NoError(t, check(gloasSlot, spec.DataVersionGloas))
+	require.NoError(t, check(fuluSlot, spec.DataVersionFulu))
+	for _, tc := range []struct {
+		running phase0.Slot
+		version spec.DataVersion
+	}{
+		{gloasSlot, spec.DataVersionFulu},
+		{gloasSlot, spec.DataVersionElectra},
+		{fuluSlot, spec.DataVersionGloas},
+	} {
+		var specErr *spectypes.Error
+		require.ErrorAs(t, check(tc.running, tc.version), &specErr, "running slot %d, version %s", tc.running, tc.version)
+		require.Equal(t, spectypes.QBFTValueInvalidErrorCode, specErr.Code)
+	}
+
+	require.NoError(t, check(0, spec.DataVersionElectra))
+	require.NoError(t, NewAggregatorCommitteeChecker(cfg, nil).CheckValue(value(spec.DataVersionElectra)))
 }
 
 // TestValidateNoDuplicateAggregatorCommittee covers the duplicate-rejection that closes the
@@ -157,7 +200,9 @@ func TestGloasVoteChecker_SameSlotIndex(t *testing.T) {
 	sameSlot := expected.BlockRoot
 	checker := NewGloasVoteChecker(fakeSlashingSigner{}, 64, []phase0.BLSPubKey{{}}, expected, &sameSlot)
 
-	require.ErrorContains(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 1))), "same-slot block")
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 1))), &specErr)
+	require.Equal(t, spectypes.BeaconVoteSameSlotIndexErrorCode, specErr.Code)
 	require.NoError(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 0))))
 
 	otherBlock := gloasVote(1, 2, 1)
@@ -183,7 +228,7 @@ func TestGloasVoteChecker_IndexOutOfRange(t *testing.T) {
 	checker := newGloasChecker(fakeSlashingSigner{}, expected)
 	var specErr *spectypes.Error
 	require.ErrorAs(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 2))), &specErr)
-	require.Equal(t, spectypes.GloasBeaconVoteInvalidIndexErrorCode, specErr.Code)
+	require.Equal(t, spectypes.BeaconVoteInvalidIndexErrorCode, specErr.Code)
 }
 
 func TestGloasVoteChecker_SourceNotBeforeTarget(t *testing.T) {
@@ -324,6 +369,45 @@ func TestProposerChecker_GloasProposerIndexMismatch(t *testing.T) {
 	var specErr *spectypes.Error
 	require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
 	require.Equal(t, spectypes.ProposerBlockProposerIndexMismatchErrorCode, specErr.Code)
+}
+
+// The bid must be the block's, for its slot and on its parent (SIP #94 §4): the beacon chain rejects a block whose
+// bid names another, so such a value is rejected.
+func TestProposerChecker_GloasBidMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	for name, tc := range map[string]struct {
+		edit func(bid *gloas.ExecutionPayloadBid)
+		code int
+	}{
+		"slot":        {func(bid *gloas.ExecutionPayloadBid) { bid.Slot++ }, spectypes.ProposerBidSlotMismatchErrorCode},
+		"parent root": {func(bid *gloas.ExecutionPayloadBid) { bid.ParentBlockRoot = phase0.Root{0x01} }, spectypes.ProposerBidParentRootMismatchErrorCode},
+	} {
+		t.Run(name, func(t *testing.T) {
+			block := gloasProposerBlock(gloasProposerSlot)
+			tc.edit(block.Body.SignedExecutionPayloadBid.Message)
+			value := encodeGloasProposal(t, &gloas.GloasProposalData{Block: block, PayloadRoot: phase0.Root{0x50}})
+
+			var specErr *spectypes.Error
+			require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
+			require.Equal(t, tc.code, specErr.Code)
+		})
+	}
+}
+
+// A block over one of its list limits is rejected (SIP #94 §4): the beacon chain would reject it.
+func TestProposerChecker_GloasListLimit(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	block := gloasProposerBlock(gloasProposerSlot)
+	block.Body.VoluntaryExits = make([]*phase0.SignedVoluntaryExit, 17) // MAX_VOLUNTARY_EXITS + 1
+	for i := range block.Body.VoluntaryExits {
+		block.Body.VoluntaryExits[i] = &phase0.SignedVoluntaryExit{Message: &phase0.VoluntaryExit{}}
+	}
+	value := encodeGloasProposal(t, &gloas.GloasProposalData{Block: block, PayloadRoot: phase0.Root{0x50}})
+
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
+	require.Equal(t, spectypes.QBFTValueInvalidErrorCode, specErr.Code)
+	require.ErrorContains(t, specErr, "voluntary exits")
 }
 
 // payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value without one

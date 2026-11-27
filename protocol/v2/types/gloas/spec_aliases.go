@@ -33,10 +33,11 @@ type (
 	SignedProposerPreferences      = eth2gloas.SignedProposerPreferences
 	BuilderIndex                   = eth2gloas.BuilderIndex
 
-	// GloasBeaconVote is the committee runner's consensus value on Gloas slots (SIP #94 §2): BeaconVote
-	// plus the BN-supplied payload-status AttestationData.Index, in a fixed 120-byte encoding, so a
-	// pre-Gloas 112-byte BeaconVote never decodes as one (or vice versa).
-	GloasBeaconVote = spectypes.GloasBeaconVote
+	// GloasBeaconVote is the committee runner's consensus value on Gloas slots (SIP #94 §2): the
+	// Gloas-only spec's BeaconVote, which carries the BN-supplied payload-status AttestationData.Index in
+	// a fixed 120-byte encoding, so the pre-Gloas 112-byte vote (types.PreGloasBeaconVote) never decodes
+	// as one (or vice versa).
+	GloasBeaconVote = spectypes.BeaconVote
 
 	// BlindedExecutionPayloadEnvelope is the §6 signing input (SIP #94 §6): the envelope with the payload
 	// and the execution requests replaced by their roots, whose progressive root equals the full

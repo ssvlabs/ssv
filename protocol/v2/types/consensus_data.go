@@ -97,7 +97,7 @@ func GetSyncCommitteeContributions(cd *spectypes.ProposerConsensusData) (spectyp
 func ValidateConsensusData(cd *spectypes.ProposerConsensusData) error {
 	switch cd.Duty.Type {
 	case spectypes.BNRoleProposer:
-		if err := cd.Validate(); err != nil {
+		if _, _, err := PreGloasBlockData(cd); err != nil {
 			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 		}
 	case spectypes.BNRoleAggregator:
@@ -108,8 +108,8 @@ func ValidateConsensusData(cd *spectypes.ProposerConsensusData) error {
 		if _, err := GetSyncCommitteeContributions(cd); err != nil {
 			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 		}
-	case spectypes.BNRoleValidatorRegistration:
-		return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "validator registration has no consensus data")
+	case BNRoleValidatorRegistration:
+		return spectypes.NewError(ValidatorRegistrationNoConsensusPhaseErrorCode, "validator registration has no consensus data")
 	case spectypes.BNRoleVoluntaryExit:
 		return spectypes.NewError(spectypes.ValidatorExitNoConsensusPhaseErrorCode, "voluntary exit has no consensus data")
 	default:

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/metrics"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -66,6 +67,6 @@ func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay t
 // simple is preferable to distinguishing the two paths in the duty.
 func dutySlotIsExecutionSlot(role types.RunnerRole) bool {
 	return role != types.RoleVoluntaryExit &&
-		role != types.RoleValidatorRegistration &&
+		role != ssvtypes.RoleValidatorRegistration &&
 		role != types.RoleProposerPreferences
 }

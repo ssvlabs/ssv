@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
@@ -175,8 +176,8 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 			expectedSlot := b.State.CurrentDuty.DutySlot()
 
 			// Parse-check the decided value against the slot's fork: a GloasBeaconVote (120B) on Gloas,
-			// a BeaconVote (112B) before. The two reject on length, so a wrong-fork value fails here.
-			decidedValue := spectypes.Encoder(&spectypes.BeaconVote{})
+			// a PreGloasBeaconVote (112B) before. The two reject on length, so a wrong-fork value fails here.
+			decidedValue := spectypes.Encoder(&ssvtypes.PreGloasBeaconVote{})
 			if b.NetworkConfig.IsGloasAtSlot(expectedSlot) {
 				decidedValue = &gloas.GloasBeaconVote{}
 			}

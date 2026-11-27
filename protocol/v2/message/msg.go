@@ -65,7 +65,7 @@ var beaconRoleByName = map[string]spectypes.BeaconRole{
 	roleProposer:                  spectypes.BNRoleProposer,
 	roleSyncCommittee:             spectypes.BNRoleSyncCommittee,
 	roleSyncCommitteeContribution: spectypes.BNRoleSyncCommitteeContribution,
-	roleValidatorRegistration:     spectypes.BNRoleValidatorRegistration,
+	roleValidatorRegistration:     ssvtypes.BNRoleValidatorRegistration,
 	roleVoluntaryExit:             spectypes.BNRoleVoluntaryExit,
 	rolePTCAttester:               spectypes.BNRolePTCAttester,
 	roleProposerPreferences:       spectypes.BNRoleProposerPreferences,
@@ -113,7 +113,7 @@ func PartialSigMsgTypeToString(t spectypes.PartialSigMsgType) string {
 		return PartialSigSelectionProof
 	case ssvtypes.ContributionProofs:
 		return PartialSigContributionProofs
-	case spectypes.ValidatorRegistrationPartialSig:
+	case ssvtypes.ValidatorRegistrationPartialSig:
 		return PartialSigValidatorRegistration
 	case spectypes.VoluntaryExitPartialSig:
 		return PartialSigVoluntaryExit
@@ -144,7 +144,7 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 	case roleSyncCommitteeContribution:
 		return ssvtypes.RoleSyncCommitteeContribution, nil
 	case roleValidatorRegistration:
-		return spectypes.RoleValidatorRegistration, nil
+		return ssvtypes.RoleValidatorRegistration, nil
 	case roleVoluntaryExit:
 		return spectypes.RoleVoluntaryExit, nil
 	case rolePTCAttester:
@@ -189,7 +189,7 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 		return roleProposer
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return roleSyncCommitteeContribution
-	case spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleValidatorRegistration:
 		return roleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		return roleVoluntaryExit

@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
@@ -86,22 +87,20 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 	}
 }
 
-// decidedAttestationVote extracts the committee runner's decided consensus value as the common
-// BeaconVote plus, on Gloas-and-later slots, the payload-status index it carries (SIP #94 §2). The
-// concrete type — fixed by the caller's decode prototype — selects the fork: a GloasBeaconVote yields
-// a non-nil index, a plain BeaconVote a nil one. The BeaconVote half (BlockRoot/Source/Target) is
-// identical across forks, so the attestation and sync-committee paths consume it unchanged. The vote
-// is validated too: the value check has already validated any decided value, so this only guards
-// against that check regressing.
-func decidedAttestationVote(value spectypes.Encoder) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
+// decidedAttestationVote extracts the committee runner's decided consensus value: the head block root and FFG
+// checkpoints both forks' votes carry, as a PreGloasBeaconVote, plus on Gloas-and-later slots the payload-status
+// index (SIP #94 §2). The concrete type — fixed by the caller's decode prototype — selects the fork: a
+// GloasBeaconVote yields a non-nil index, a PreGloasBeaconVote a nil one. The vote is validated too: the value
+// check has already validated any decided value, so this only guards against that check regressing.
+func decidedAttestationVote(value spectypes.Encoder) (*ssvtypes.PreGloasBeaconVote, *phase0.CommitteeIndex, error) {
 	switch v := value.(type) {
 	case *gloas.GloasBeaconVote:
 		if err := v.Validate(); err != nil {
 			return nil, nil, err
 		}
 		index := v.AttestationDataIndex
-		return &spectypes.BeaconVote{BlockRoot: v.BlockRoot, Source: v.Source, Target: v.Target}, &index, nil
-	case *spectypes.BeaconVote:
+		return &ssvtypes.PreGloasBeaconVote{BlockRoot: v.BlockRoot, Source: v.Source, Target: v.Target}, &index, nil
+	case *ssvtypes.PreGloasBeaconVote:
 		if err := v.Validate(); err != nil {
 			return nil, nil, err
 		}

@@ -103,6 +103,9 @@ var (
 	ErrUnpreparedRoundChangeWithFullData = Error{text: "unprepared round change with full data"}
 	// Ignored for now; see the rule in validateConsensusMessageSemantics.
 	ErrMissingFullData = Error{text: "proposal, prepared round change or decided message without full data"}
+	// Ignored for now rather than rejected, since older nodes, which decode such a justification, still relay it.
+	// Move to the rejected block once all nodes enforce it.
+	ErrJustificationWithFullData = Error{text: "justification with full data"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).

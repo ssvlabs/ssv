@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type Hex []byte
@@ -91,7 +92,7 @@ func (r *Role) Bind(value string) error {
 }
 
 func (r Role) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + spectypes.BeaconRole(r).String() + `"`), nil
+	return []byte(`"` + ssvtypes.BeaconRoleToString(spectypes.BeaconRole(r)) + `"`), nil
 }
 
 func (r *Role) UnmarshalJSON(data []byte) error {

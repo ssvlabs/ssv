@@ -867,12 +867,12 @@ func buildCommitteeProposalWithBeaconVote(identifier spectypes.MessageID, slot p
 	return msg
 }
 
-// buildRoleRoots encodes a BeaconVote for the given block root and asks the
+// buildRoleRoots encodes a pre-Gloas BeaconVote for the given block root and asks the
 // collector to derive sync-committee and attester signing roots for the slot.
 // It returns (syncRoot, attRoot, encodedVote).
 func buildRoleRoots(t *testing.T, c *Collector, slot phase0.Slot, blockRoot phase0.Root) (phase0.Root, phase0.Root, []byte) {
 	t.Helper()
-	bv := &spectypes.BeaconVote{BlockRoot: blockRoot}
+	bv := &ssvtypes.PreGloasBeaconVote{BlockRoot: blockRoot}
 	data, err := bv.Encode()
 	require.NoError(t, err)
 	syncRoot, attRoot, err := c.computeRoleRoots(t.Context(), slot, data)
@@ -932,9 +932,7 @@ func justificationSignedBy(signers []spectypes.OperatorID, rcj [][]byte) []byte 
 func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 	collector := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil, nil)
 
-	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
-
-	root, err := collector.getSyncCommitteeRoot(t.Context(), 1, bnVote.BlockRoot)
+	root, err := collector.getSyncCommitteeRoot(t.Context(), 1, phase0.Root{1, 2, 3})
 	require.NoError(t, err)
 
 	wantRoot := [32]byte{3, 73, 222, 196, 134, 206, 159, 128,
@@ -944,9 +942,9 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 }
 
 func TestDutyTracer_DecodeCommitteeVote(t *testing.T) {
-	// Pre-Gloas: a BeaconVote decodes to the common vote with no attestation index.
+	// Pre-Gloas: a PreGloasBeaconVote decodes to the common vote with no attestation index.
 	preGloas := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil, nil)
-	bv := &spectypes.BeaconVote{BlockRoot: phase0.Root{1, 2, 3}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
+	bv := &ssvtypes.PreGloasBeaconVote{BlockRoot: phase0.Root{1, 2, 3}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
 	bvBytes, err := bv.Encode()
 	require.NoError(t, err)
 
@@ -1387,7 +1385,7 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		{spectypes.RoleProposer, spectypes.BNRoleProposer, false},
 		{ssvtypes.RoleAggregator, spectypes.BNRoleAggregator, false},
 		{ssvtypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
-		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
+		{ssvtypes.RoleValidatorRegistration, ssvtypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
 		{spectypes.RolePTCAttester, spectypes.BNRolePTCAttester, false},

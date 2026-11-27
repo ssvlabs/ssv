@@ -73,8 +73,8 @@ func TestIsCommitteeDutyAtSlot(t *testing.T) {
 		{name: "SYNC_COMMITTEE_CONTRIBUTION is a committee duty post-fork", role: spectypes.BNRoleSyncCommitteeContribution, netCfg: postFork, expected: true},
 		{name: "PROPOSER is never a committee duty pre-fork", role: spectypes.BNRoleProposer, netCfg: preFork, expected: false},
 		{name: "PROPOSER is never a committee duty post-fork", role: spectypes.BNRoleProposer, netCfg: postFork, expected: false},
-		{name: "VALIDATOR_REGISTRATION is never a committee duty pre-fork", role: spectypes.BNRoleValidatorRegistration, netCfg: preFork, expected: false},
-		{name: "VALIDATOR_REGISTRATION is never a committee duty post-fork", role: spectypes.BNRoleValidatorRegistration, netCfg: postFork, expected: false},
+		{name: "VALIDATOR_REGISTRATION is never a committee duty pre-fork", role: ssvtypes.BNRoleValidatorRegistration, netCfg: preFork, expected: false},
+		{name: "VALIDATOR_REGISTRATION is never a committee duty post-fork", role: ssvtypes.BNRoleValidatorRegistration, netCfg: postFork, expected: false},
 	}
 
 	for _, tt := range tests {

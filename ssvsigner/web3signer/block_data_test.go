@@ -5,14 +5,15 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/ssvsigner/internal/ssvtestingutils"
 )
 
 func TestConvertBlockToBeaconBlockData(t *testing.T) {
 	t.Run("Capella BeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionCapella
-		block := testingutils.TestingBeaconBlockV(dataVersion).Capella
+		block := ssvtestingutils.TestingBeaconBlockV(dataVersion).Capella
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -32,7 +33,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Deneb BeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionDeneb
-		block := testingutils.TestingBeaconBlockV(dataVersion).Deneb.Block
+		block := ssvtestingutils.TestingBeaconBlockV(dataVersion).Deneb.Block
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -52,7 +53,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Electra BeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionElectra
-		block := testingutils.TestingBeaconBlockV(dataVersion).Electra.Block
+		block := ssvtestingutils.TestingBeaconBlockV(dataVersion).Electra.Block
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -72,7 +73,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Fulu BeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionFulu
-		block := testingutils.TestingBeaconBlockV(dataVersion).Fulu.Block
+		block := ssvtestingutils.TestingBeaconBlockV(dataVersion).Fulu.Block
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -92,7 +93,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Capella BlindedBeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionCapella
-		block := testingutils.TestingBlindedBeaconBlockV(dataVersion).CapellaBlinded
+		block := ssvtestingutils.TestingBlindedBeaconBlockV(dataVersion).CapellaBlinded
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -112,7 +113,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Deneb BlindedBeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionDeneb
-		block := testingutils.TestingBlindedBeaconBlockV(dataVersion).DenebBlinded
+		block := ssvtestingutils.TestingBlindedBeaconBlockV(dataVersion).DenebBlinded
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -132,7 +133,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Electra BlindedBeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionElectra
-		block := testingutils.TestingBlindedBeaconBlockV(dataVersion).ElectraBlinded
+		block := ssvtestingutils.TestingBlindedBeaconBlockV(dataVersion).ElectraBlinded
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)
@@ -152,7 +153,7 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 
 	t.Run("Fulu BlindedBeaconBlock", func(t *testing.T) {
 		dataVersion := spec.DataVersionFulu
-		block := testingutils.TestingBlindedBeaconBlockV(dataVersion).FuluBlinded
+		block := ssvtestingutils.TestingBlindedBeaconBlockV(dataVersion).FuluBlinded
 		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
 
 		require.NoError(t, err)

@@ -40,7 +40,7 @@ func TestFormatRunnerRole(t *testing.T) {
 		},
 		{
 			name: "validator registration role",
-			role: spectypes.RoleValidatorRegistration,
+			role: ssvtypes.RoleValidatorRegistration,
 			want: "VALIDATOR_REGISTRATION",
 		},
 		{
@@ -104,7 +104,7 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 		spectypes.RoleCommittee,
 		spectypes.RoleAggregatorCommittee,
 		spectypes.RoleProposer,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
@@ -123,9 +123,9 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 	// 15 is headroom over the spec's current max role value (9): roles are appended
 	// sequentially, so sweeping a few values past the end catches additions without the
 	// spec exporting a count. Roles the spec does not know return "UNDEFINED" and are
-	// skipped: divergence on genuinely unknown values is intentional (the deprecated Alan
-	// roles also stringify to "UNDEFINED" in the spec, but they are covered by the
-	// explicit list above).
+	// skipped: divergence on genuinely unknown values is intentional (the roles the spec
+	// retired, the Alan ones and validator registration, also stringify to "UNDEFINED" in
+	// the spec, but they are covered by the explicit list above).
 	for i := 0; i <= 15; i++ {
 		role := spectypes.RunnerRole(i)
 		if role.String() == "UNDEFINED" {
