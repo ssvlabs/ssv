@@ -19,7 +19,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -190,7 +189,7 @@ type stateComparisonRunner struct {
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
 	// Decode the state-comparison JSON once, straight into the types used below: for the max-validators
 	// vectors it runs to ~17MB, and each extra pass over it takes seconds under -race.
-	byteValue, err := storage.ReadStateComparisonFile("ssv", name, testType)
+	byteValue, err := protocoltesting.ReadStateComparisonFile("ssv", name, testType)
 	require.NoError(t, err)
 	state := &committeeStateComparison{}
 	require.NoError(t, json.Unmarshal(byteValue, state))

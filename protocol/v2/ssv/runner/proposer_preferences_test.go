@@ -17,7 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 type errFeeRecipientProvider struct{}
@@ -321,7 +321,7 @@ func TestProposerPreferencesRunner_stashReplayConvergence(t *testing.T) {
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        network,
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: feeRecipient},
@@ -438,7 +438,7 @@ func TestProposerPreferencesRunner_reemissionThatCannotRebuildKeepsBroadcastPref
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        network,
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: feeRecipients,
@@ -552,7 +552,7 @@ func TestProposerPreferencesSlotRunner_buildFallsBackToLastDependentRoot(t *test
 				Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 				Beacon:         bn,
 				Network:        network,
-				Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+				Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 				OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 			},
 			FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},

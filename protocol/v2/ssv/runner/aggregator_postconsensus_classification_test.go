@@ -21,7 +21,7 @@ import (
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 // faultyAggregateSubmitBeacon is declared in aggregator_committee_test.go and shared by both
@@ -44,7 +44,7 @@ func newAggregatorRunnerEnv(t *testing.T, beaconNode beacon.BeaconNode) *aggrega
 
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	logger := zaptest.NewLogger(t)
-	signer := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	signer := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 
 	config := protocoltesting.TestingConfig(logger, keySet)
 	config.Network = network

@@ -13,7 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
@@ -47,7 +47,7 @@ func (n *testingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ 
 }
 
 func TestController_Marshaling(t *testing.T) {
-	c := qbft.TestingControllerStruct
+	c := testingControllerStruct
 
 	byts, err := c.Encode()
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestController_OnQBFTRoundTimeoutWithRoundCheck(t *testing.T) {
 
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+		BeaconSigner: ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 		Network:      newTestingNetwork(1, keySet.OperatorKeys[1]),
 		CutOffRound:  spectestingutils.TestingCutOffRound,
 	}

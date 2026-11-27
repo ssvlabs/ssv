@@ -7,7 +7,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -24,7 +24,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 		Network:       testing.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Beacon:        testing.NewTestingBeaconNodeWrapped(),
 		Storage:       testingStores(logger),
-		Signer:        ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+		Signer:        ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 	}
 
 	return validator.NewValidator(

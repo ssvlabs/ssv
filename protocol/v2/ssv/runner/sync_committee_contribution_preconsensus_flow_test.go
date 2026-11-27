@@ -23,7 +23,7 @@ import (
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 // syncCommitteeContributionPreConsensusCaptureBeacon embeds the shared testing beacon node and
@@ -205,7 +205,7 @@ func newSyncCommitteeAggregatorRunnerForTest(
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := ssvtestingutils.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	km := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	operatorSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	valCheck := ssv.NewSyncCommitteeContributionChecker(

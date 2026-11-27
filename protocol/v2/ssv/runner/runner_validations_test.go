@@ -20,6 +20,7 @@ import (
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 // A partial that reaches a runner before its duty started, or after the duty succeeded, is reported
@@ -165,7 +166,7 @@ func TestProcessPreConsensusRecoversFromBadShare(t *testing.T) {
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		}
 	}

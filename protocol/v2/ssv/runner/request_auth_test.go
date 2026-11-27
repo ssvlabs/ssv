@@ -19,7 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 // broadcastPartialSigTypes decodes the captured broadcasts into their partial-sig message types.
@@ -77,7 +77,7 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        network,
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
@@ -202,7 +202,7 @@ func TestProposerPreferencesRunner_requestAuthWithoutBuilders(t *testing.T) {
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
@@ -262,7 +262,7 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        network,
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: feeRecipient},
@@ -358,7 +358,7 @@ func TestProposerPreferencesRunner_requestAuthLogsRedactedURL(t *testing.T) {
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
@@ -438,7 +438,7 @@ func TestProposerPreferencesRunner_requestAuthSurvivesConcludedReemission(t *tes
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        network,
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: feeRecipient},
@@ -564,7 +564,7 @@ func TestProposerPreferencesRunner_failedReemissionStillTakesOverAndReplays(t *t
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 			Beacon:         bn,
 			Network:        network,
-			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
@@ -659,7 +659,7 @@ func TestProposerPreferencesRunner_requestAuthBatches(t *testing.T) {
 				Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
 				Beacon:         bn,
 				Network:        protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-				Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+				Signer:         ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 				OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
 			},
 			FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},

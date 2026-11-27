@@ -1,4 +1,5 @@
-package ekm
+// Package ekmtest provides test helpers for code that signs through ekm.
+package ekmtest
 
 import (
 	"context"
@@ -8,6 +9,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
+// TestingKeyManagerAdapter adapts ssv-spec's TestingKeyManager to ekm.BeaconSigner.
 type TestingKeyManagerAdapter struct {
 	*spectestingutils.TestingKeyManager
 }

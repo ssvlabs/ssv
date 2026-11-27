@@ -24,7 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 type guardCall struct {
@@ -133,7 +133,7 @@ func newCommitteeRunnerEnvInternal(
 	msgID := spectestingutils.CommitteeMsgID(sampleKey)
 	network := protocoltesting.NewTestingNetwork(1, sampleKey.OperatorKeys[1])
 	logger := zaptest.NewLogger(t)
-	signer := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	signer := ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 
 	config := protocoltesting.TestingConfig(logger, sampleKey)
 	config.Network = network

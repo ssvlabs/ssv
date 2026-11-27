@@ -18,7 +18,7 @@ import (
 	qbftconfig "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm/ekmtest"
 )
 
 type instanceTestEnv struct {
@@ -104,7 +104,7 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 	committeeMember.SSVOperatorPubKey = pubKey
 
 	config := &qbftconfig.Config{
-		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+		BeaconSigner: ekmtest.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 		ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		},

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/rsa"
 	"errors"
 	"math"
 	"testing"
@@ -11,10 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -98,30 +94,15 @@ func TestHandleDecidedQuery(t *testing.T) {
 	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
 
-	sks, op, rsaKeys := GenerateNodes(4)
-	oids := make([]spectypes.OperatorID, 0, len(op))
-	for _, o := range op {
-		oids = append(oids, o.OperatorID)
-	}
+	sks, oids := GenerateNodes(4)
 
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := qbftstorage.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		return oids, &specqbft.Message{
-			MsgType:    specqbft.CommitMsgType,
-			Height:     height,
-			Round:      1,
-			Identifier: pk.Serialize(),
-			Root:       [32]byte{0x1, 0x2, 0x3},
-		}
-	})
-	require.NoError(t, err)
-
 	for _, role := range roles {
-		for _, d := range decided250Seq {
+		for slot := phase0.Slot(0); slot <= 250; slot++ {
 			_, err := ibftStorage.Get(role).SaveParticipants(
 				spectypes.ValidatorPK(pk.Serialize()),
-				phase0.Slot(d.State.Height),
-				d.DecidedMessage.OperatorIDs,
+				slot,
+				oids,
 			)
 			require.NoError(t, err)
 		}
@@ -221,31 +202,17 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 	return sExporter, storageMap
 }
 
-// GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator, []*rsa.PrivateKey) {
+// GenerateNodes returns the operator IDs 1..cnt and a random BLS secret key for each.
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []spectypes.OperatorID) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make([]*spectypes.Operator, 0, cnt)
-	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
-	rsaKeys := make([]*rsa.PrivateKey, 0, cnt)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey, cnt)
+	oids := make([]spectypes.OperatorID, 0, cnt)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		opPubKey, privateKey, err := rsaencryption.GenerateKeyPairPEM()
-		if err != nil {
-			panic(err)
-		}
-		pk, err := rsaencryption.PEMToPrivateKey(privateKey)
-		if err != nil {
-			panic(err)
-		}
-
-		nodes = append(nodes, &spectypes.Operator{
-			OperatorID:        spectypes.OperatorID(i),
-			SSVOperatorPubKey: opPubKey,
-		})
 		sks[spectypes.OperatorID(i)] = sk
-		rsaKeys = append(rsaKeys, pk)
+		oids = append(oids, spectypes.OperatorID(i))
 	}
-	return sks, nodes, rsaKeys
+	return sks, oids
 }
