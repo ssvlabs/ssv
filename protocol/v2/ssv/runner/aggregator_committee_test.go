@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -16,7 +17,6 @@ import (
 	"go.uber.org/zap/zaptest"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -75,9 +75,16 @@ func newAggregatorCommitteeRunnerEnv(
 		false,
 	)
 
+	// The fixtures stamp Electra on duties at slots TestNetwork places in Fulu. Push Fulu out so those slots
+	// resolve to Electra, the fork the value check pins the value's Version to.
+	netCfg := cloneTestNetworkConfig()
+	fulu := netCfg.Beacon.Forks[spec.DataVersionFulu]
+	fulu.Epoch = math.MaxUint64
+	netCfg.Beacon.Forks[spec.DataVersionFulu] = fulu
+
 	runnerI, err := NewAggregatorCommitteeRunner(AggregatorCommitteeRunnerOptions{
 		BaseRunnerOptions: BaseRunnerOptions{
-			NetworkConfig:  networkconfig.TestNetwork,
+			NetworkConfig:  netCfg,
 			Share:          shareMap,
 			Beacon:         beaconNode,
 			Network:        network,
@@ -128,6 +135,30 @@ func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T
 		}
 	}
 	return concluded, nil
+}
+
+// The runner's value check pins the value's Version to the fork of the duty it runs (see
+// NewAggregatorCommitteeChecker): skipped before a duty starts, a value for another fork is rejected once one runs.
+func TestAggregatorCommitteeRunnerValCheck_PinsVersionToDutySlotFork(t *testing.T) {
+	const version = spec.DataVersionElectra
+
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, protocoltesting.NewTestingBeaconNodeWrapped())
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	cd := ssvtestingutils.TestAggregatorCommitteeConsensusDataForDuty(duty, version, nil)
+	value := func(version spec.DataVersion) []byte {
+		cd.Version = version
+		encoded, err := cd.Encode()
+		require.NoError(t, err)
+		return encoded
+	}
+
+	require.Zero(t, env.runner.RunningDutySlot())
+	require.NoError(t, env.runner.ValCheck.CheckValue(value(spec.DataVersionFulu)))
+
+	env.runner.State = NewRunnerState(env.sampleKey.Threshold, duty)
+	require.Equal(t, duty.DutySlot(), env.runner.RunningDutySlot())
+	require.NoError(t, env.runner.ValCheck.CheckValue(value(version)))
+	require.ErrorContains(t, env.runner.ValCheck.CheckValue(value(spec.DataVersionFulu)), "value version does not match slot fork")
 }
 
 // An error after the instance decides — here an aggregate can't be signed — leaves the duty open with the failure

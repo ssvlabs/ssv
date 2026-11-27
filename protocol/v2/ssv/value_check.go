@@ -160,10 +160,19 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
-type aggregatorCommitteeChecker struct{}
+type aggregatorCommitteeChecker struct {
+	beaconConfig    *networkconfig.Beacon
+	runningDutySlot func() phase0.Slot
+}
 
-func NewAggregatorCommitteeChecker() ValueChecker {
-	return &aggregatorCommitteeChecker{}
+// NewAggregatorCommitteeChecker validates the aggregator committee's consensus value. runningDutySlot reports the
+// slot of the duty the runner is running, whose fork the value's Version must name. The pin is skipped when
+// runningDutySlot is nil (isolated value checks) or reports 0 (no duty started yet).
+func NewAggregatorCommitteeChecker(beaconConfig *networkconfig.Beacon, runningDutySlot func() phase0.Slot) ValueChecker {
+	return &aggregatorCommitteeChecker{
+		beaconConfig:    beaconConfig,
+		runningDutySlot: runningDutySlot,
+	}
 }
 
 func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
@@ -174,6 +183,19 @@ func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
 		)
 	}
+
+	// The leader stamps Version, and the fork it names picks how the attestations decode and which roots the
+	// aggregators sign. Gloas and Electra attestations encode alike but merkleize differently, so a value naming
+	// another fork than the slot's would pass validation and have the cluster sign aggregates the beacon node
+	// rejects. Honest leaders stamp the slot's fork.
+	if v.runningDutySlot != nil {
+		if slot := v.runningDutySlot(); slot != 0 {
+			if want, _ := v.beaconConfig.ForkAtEpoch(v.beaconConfig.EstimatedEpochAtSlot(slot)); cd.Version != want {
+				return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "value version does not match slot fork")
+			}
+		}
+	}
+
 	if err := ssvtypes.ValidateAggregatorCommitteeConsensusData(cd); err != nil {
 		return fmt.Errorf("invalid value: %w", err)
 	}

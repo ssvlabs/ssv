@@ -252,7 +252,7 @@ func beaconRootsAsHex(roots []phase0.Root) []string {
 }
 
 func TestConstructAttestationData(t *testing.T) {
-	vote := &spectypes.BeaconVote{
+	vote := &ssvtypes.PreGloasBeaconVote{
 		BlockRoot: ssvtestingutils.TestBeaconVote.BlockRoot,
 		Source:    ssvtestingutils.TestBeaconVote.Source,
 		Target:    ssvtestingutils.TestBeaconVote.Target,

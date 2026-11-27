@@ -472,7 +472,7 @@ listener:
 func (r *CommitteeRunner) signAttesterDuty(
 	ctx context.Context,
 	validatorDuty *spectypes.ValidatorDuty,
-	beaconVote *spectypes.BeaconVote,
+	beaconVote *ssvtypes.PreGloasBeaconVote,
 	version spec.DataVersion,
 	gloasAttestationIndex *phase0.CommitteeIndex,
 	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
@@ -1194,7 +1194,7 @@ func (r *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
 	return r.doppelgangerHandler
 }
 
-func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion, gloasIndex *phase0.CommitteeIndex) *phase0.AttestationData {
+func constructAttestationData(vote *ssvtypes.PreGloasBeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion, gloasIndex *phase0.CommitteeIndex) *phase0.AttestationData {
 	attData := &phase0.AttestationData{
 		Slot:            duty.Slot,
 		Index:           duty.CommitteeIndex,

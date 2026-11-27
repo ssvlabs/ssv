@@ -166,7 +166,8 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 		)
 		return checker.CheckValue
 	case spectypes.RoleAggregatorCommittee:
-		checker := ssv.NewAggregatorCommitteeChecker()
+		// The vector's running duty slot; 0 (unset) skips the version pin.
+		checker := ssv.NewAggregatorCommitteeChecker(beaconConfig, func() phase0.Slot { return test.DutySlot })
 		return checker.CheckValue
 	default:
 		return nil
@@ -285,7 +286,12 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 		)
 
 	case *runner.AggregatorCommitteeRunner:
-		return ssv.NewAggregatorCommitteeChecker()
+		// Pin against the runner's own fork schedule, the one its leader stamps Version from.
+		runnerBeaconConfig := beaconConfig
+		if typedRunner.BaseRunner != nil && typedRunner.NetworkConfig != nil {
+			runnerBeaconConfig = typedRunner.NetworkConfig.Beacon
+		}
+		return ssv.NewAggregatorCommitteeChecker(runnerBeaconConfig, typedRunner.RunningDutySlot)
 
 	default:
 		return nil

@@ -25,7 +25,8 @@ import (
 
 // PreGloasBeaconVote is the committee runner's consensus value before Gloas: the head block root and the
 // FFG checkpoints, 112 bytes of SSZ. From Gloas, the spec's BeaconVote, which also carries the attestation
-// data index, takes its place.
+// data index, takes its place. Its fields are the ones both forks' votes carry, so the duty paths also hold a
+// Gloas vote's in it, with the index apart.
 type PreGloasBeaconVote struct {
 	BlockRoot phase0.Root `ssz-size:"32"`
 	Source    *phase0.Checkpoint

@@ -100,7 +100,7 @@ func TestCommitteeObserver_saveAttesterRoots_GloasSingleRoot(t *testing.T) {
 		}
 	}
 
-	beaconVote := &spectypes.BeaconVote{BlockRoot: phase0.Root{1}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
+	beaconVote := &ssvtypes.PreGloasBeaconVote{BlockRoot: phase0.Root{1}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
 	qbftMsg := &specqbft.Message{Height: 100}
 
 	gloasObserver := newObserver()

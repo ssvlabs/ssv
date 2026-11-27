@@ -527,24 +527,23 @@ func (c *Collector) processPartialSigCommittee(
 	}
 }
 
-// decodeCommitteeVote decodes committee FullData as a BeaconVote holding the fields both forks' votes
-// share (its AttestationDataIndex is always zero) plus, on Gloas slots, the carried attestation index (nil
-// before Gloas) — the duty tracer's mirror of the runner's fork-aware decode, so the signing roots it
-// derives match what operators actually signed.
-func (c *Collector) decodeCommitteeVote(slot phase0.Slot, in []byte) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
+// decodeCommitteeVote decodes committee FullData into the fields both forks' votes share, as a PreGloasBeaconVote,
+// plus on Gloas slots the carried attestation index (nil before Gloas) — the duty tracer's mirror of the runner's
+// fork-aware decode, so the signing roots it derives match what operators actually signed.
+func (c *Collector) decodeCommitteeVote(slot phase0.Slot, in []byte) (*ssvtypes.PreGloasBeaconVote, *phase0.CommitteeIndex, error) {
 	if c.beacon.IsGloasAtSlot(slot) {
 		gv := &gloas.GloasBeaconVote{}
 		if err := gv.Decode(in); err != nil {
 			return nil, nil, fmt.Errorf("decode gloas beacon vote: %w", err)
 		}
 		index := gv.AttestationDataIndex
-		return &spectypes.BeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}, &index, nil
+		return &ssvtypes.PreGloasBeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}, &index, nil
 	}
 	pv := new(ssvtypes.PreGloasBeaconVote)
 	if err := pv.Decode(in); err != nil {
 		return nil, nil, fmt.Errorf("decode beacon vote: %w", err)
 	}
-	return &spectypes.BeaconVote{BlockRoot: pv.BlockRoot, Source: pv.Source, Target: pv.Target}, nil, nil
+	return pv, nil, nil
 }
 
 func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, blockRoot phase0.Root) (phase0.Root, error) {

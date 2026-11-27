@@ -7,11 +7,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -73,6 +75,46 @@ func encodeBeaconVote(t *testing.T, sourceEpoch, targetEpoch phase0.Epoch) []byt
 	data, err := bv.Encode()
 	require.NoError(t, err)
 	return data
+}
+
+// The value's Version must be the running duty slot's fork: Gloas and Electra attestations encode alike, so the
+// same value validates under either, and only the slot tells which roots the aggregators must sign. A value naming
+// another fork is rejected; with no running duty (nil, or 0 before one starts) the pin is skipped.
+func TestAggregatorCommitteeChecker_VersionPinnedToSlotFork(t *testing.T) {
+	const gloasEpoch = 10 // past the test network's Fulu fork
+	cfg := networkconfig.TestNetworkWithGloas(gloasEpoch).Beacon
+	gloasSlot := cfg.FirstSlotAtEpoch(gloasEpoch)
+	fuluSlot := gloasSlot - 1
+
+	duty := ssvtestingutils.TestingAggregatorCommitteeDuty([]int{spectestingutils.TestingValidatorIndex}, nil, spec.DataVersionFulu)
+	cd := ssvtestingutils.TestAggregatorCommitteeConsensusDataForDuty(duty, spec.DataVersionFulu, nil)
+	value := func(version spec.DataVersion) []byte {
+		cd.Version = version
+		encoded, err := cd.Encode()
+		require.NoError(t, err)
+		return encoded
+	}
+	check := func(running phase0.Slot, version spec.DataVersion) error {
+		return NewAggregatorCommitteeChecker(cfg, func() phase0.Slot { return running }).CheckValue(value(version))
+	}
+
+	require.NoError(t, check(gloasSlot, spec.DataVersionGloas))
+	require.NoError(t, check(fuluSlot, spec.DataVersionFulu))
+	for _, tc := range []struct {
+		running phase0.Slot
+		version spec.DataVersion
+	}{
+		{gloasSlot, spec.DataVersionFulu},
+		{gloasSlot, spec.DataVersionElectra},
+		{fuluSlot, spec.DataVersionGloas},
+	} {
+		var specErr *spectypes.Error
+		require.ErrorAs(t, check(tc.running, tc.version), &specErr, "running slot %d, version %s", tc.running, tc.version)
+		require.Equal(t, spectypes.QBFTValueInvalidErrorCode, specErr.Code)
+	}
+
+	require.NoError(t, check(0, spec.DataVersionElectra))
+	require.NoError(t, NewAggregatorCommitteeChecker(cfg, nil).CheckValue(value(spec.DataVersionElectra)))
 }
 
 // TestValidateNoDuplicateAggregatorCommittee covers the duplicate-rejection that closes the

@@ -96,7 +96,7 @@ func TestDecidedAttestationVote(t *testing.T) {
 	require.Same(t, preGloasVote.Target, gotVote.Target)
 	require.Nil(t, gotIndex) // no attestation index before Gloas
 
-	// Gloas: the BeaconVote half is extracted and the carried attestation index is returned (non-nil).
+	// Gloas: the fields both forks share are extracted, and the carried attestation index is returned (non-nil).
 	gloasVote := &gloas.GloasBeaconVote{
 		BlockRoot:            phase0.Root{0x01},
 		Source:               &phase0.Checkpoint{},
@@ -105,8 +105,7 @@ func TestDecidedAttestationVote(t *testing.T) {
 	}
 	gotVote, gotIndex, err = decidedAttestationVote(gloasVote)
 	require.NoError(t, err)
-	require.Equal(t, gloasVote.BlockRoot, gotVote.BlockRoot)
-	require.Zero(t, gotVote.AttestationDataIndex) // the index travels only in the second result
+	require.Equal(t, &ssvtypes.PreGloasBeaconVote{BlockRoot: gloasVote.BlockRoot, Source: gloasVote.Source, Target: gloasVote.Target}, gotVote)
 	require.NotNil(t, gotIndex)
 	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
 

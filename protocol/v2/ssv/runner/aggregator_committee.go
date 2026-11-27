@@ -82,14 +82,13 @@ func NewAggregatorCommitteeRunner(
 		return nil, errors.New("no shares")
 	}
 
-	return &AggregatorCommitteeRunner{
+	r := &AggregatorCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleAggregatorCommittee,
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 			QBFTController: opts.QBFTController,
 		},
-		ValCheck:                              ssv.NewAggregatorCommitteeChecker(),
 		beacon:                                opts.Beacon,
 		network:                               opts.Network,
 		signer:                                opts.Signer,
@@ -100,7 +99,23 @@ func NewAggregatorCommitteeRunner(
 		preConsensusDutiesCheckedForSelection: make(map[phase0.ValidatorIndex]map[[32]byte]struct{}),
 
 		IsAggregator: opts.Beacon.IsAggregator,
-	}, nil
+	}
+	r.ValCheck = ssv.NewAggregatorCommitteeChecker(opts.NetworkConfig.Beacon, r.RunningDutySlot)
+
+	return r, nil
+}
+
+// RunningDutySlot is the slot of the duty this runner last started, or 0 before its first duty (or on a nil
+// runner). The value check pins the value's Version to its fork.
+func (r *AggregatorCommitteeRunner) RunningDutySlot() phase0.Slot {
+	if r == nil || r.BaseRunner == nil {
+		return 0
+	}
+	slot, err := r.currentDutySlot()
+	if err != nil {
+		return 0
+	}
+	return slot
 }
 
 func (r *AggregatorCommitteeRunner) StartNewDuty(

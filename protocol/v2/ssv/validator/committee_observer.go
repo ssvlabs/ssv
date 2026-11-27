@@ -474,8 +474,8 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 	case spectypes.RoleCommittee:
 		// On Gloas slots the decided value is a GloasBeaconVote (120B) carrying the attestation index;
 		// before Gloas it is a PreGloasBeaconVote (112B). Decode into the matching type. beaconVote keeps
-		// only the fields both share, so its AttestationDataIndex is always zero: the index is gloasIndex.
-		var beaconVote *spectypes.BeaconVote
+		// the fields both share, and gloasIndex the Gloas index.
+		var beaconVote *ssvtypes.PreGloasBeaconVote
 		var gloasIndex *phase0.CommitteeIndex
 		if ncv.beaconConfig.IsGloas(epoch) {
 			gv := &gloas.GloasBeaconVote{}
@@ -483,7 +483,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 				ncv.logger.Debug("❗ failed to decode gloas beacon vote from proposal", zap.Error(err))
 				return err
 			}
-			beaconVote = &spectypes.BeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}
+			beaconVote = &ssvtypes.PreGloasBeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}
 			index := gv.AttestationDataIndex
 			gloasIndex = &index
 		} else {
@@ -492,7 +492,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 				ncv.logger.Debug("❗ failed to decode beacon vote from proposal", zap.Error(err))
 				return err
 			}
-			beaconVote = &spectypes.BeaconVote{BlockRoot: pv.BlockRoot, Source: pv.Source, Target: pv.Target}
+			beaconVote = pv
 		}
 
 		bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
@@ -581,7 +581,7 @@ func (ncv *CommitteeObserver) saveEnvelopeRoot(ctx context.Context, epoch phase0
 	return nil
 }
 
-func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, gloasIndex *phase0.CommitteeIndex, qbftMsg *specqbft.Message) error {
+func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *ssvtypes.PreGloasBeaconVote, gloasIndex *phase0.CommitteeIndex, qbftMsg *specqbft.Message) error {
 	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
@@ -615,7 +615,7 @@ func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase
 func (ncv *CommitteeObserver) saveSyncCommRoots(
 	ctx context.Context,
 	epoch phase0.Epoch,
-	beaconVote *spectypes.BeaconVote,
+	beaconVote *ssvtypes.PreGloasBeaconVote,
 ) error {
 	syncCommDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
@@ -696,7 +696,7 @@ func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	return int(ncv.beaconConfig.SlotsPerEpoch) + validation.LateSlotAllowance
 }
 
-func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
+func constructAttestationData(vote *ssvtypes.PreGloasBeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
 	return &phase0.AttestationData{
 		Slot:            slot,
 		Index:           committeeIndex,

@@ -932,9 +932,7 @@ func justificationSignedBy(signers []spectypes.OperatorID, rcj [][]byte) []byte 
 func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 	collector := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil, nil)
 
-	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
-
-	root, err := collector.getSyncCommitteeRoot(t.Context(), 1, bnVote.BlockRoot)
+	root, err := collector.getSyncCommitteeRoot(t.Context(), 1, phase0.Root{1, 2, 3})
 	require.NoError(t, err)
 
 	wantRoot := [32]byte{3, 73, 222, 196, 134, 206, 159, 128,
@@ -944,7 +942,7 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 }
 
 func TestDutyTracer_DecodeCommitteeVote(t *testing.T) {
-	// Pre-Gloas: a BeaconVote decodes to the common vote with no attestation index.
+	// Pre-Gloas: a PreGloasBeaconVote decodes to the common vote with no attestation index.
 	preGloas := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil, nil)
 	bv := &ssvtypes.PreGloasBeaconVote{BlockRoot: phase0.Root{1, 2, 3}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
 	bvBytes, err := bv.Encode()
@@ -965,7 +963,6 @@ func TestDutyTracer_DecodeCommitteeVote(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, gv.BlockRoot, gotVote.BlockRoot)
 	require.Equal(t, phase0.Epoch(1), gotVote.Target.Epoch) // Source/Target carried over, not just BlockRoot
-	require.Zero(t, gotVote.AttestationDataIndex)           // the index travels only in the second result
 	require.NotNil(t, gotIndex)
 	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
 }
